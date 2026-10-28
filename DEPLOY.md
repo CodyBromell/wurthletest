@@ -1,41 +1,51 @@
 # Deploying Würthle to Vercel
 
-Vercel + Neon Postgres. Both free tiers. Total time ~10 minutes.
+Vercel + Supabase Postgres. Both free tiers. Total time ~10 minutes.
 
-## 1. Create the database (Neon)
+## 1. Create the database (Supabase)
 
-1. Go to **https://neon.tech** → **Sign up** (GitHub login is fastest).
-2. Create a project — any name, pick the EU (eu-central-1 Frankfurt or eu-west-2 London) region to minimise latency from UK users.
-3. On the project dashboard, click **Connection string** → **Pooled connection** (important: pooled). Copy the full `postgresql://…` string. Looks like:
-
+1. Go to **https://supabase.com** → **Start your project** (sign up with GitHub is fastest).
+2. **New project**:
+   - Name: `wurthle` (or anything)
+   - Region: **London** or **Frankfurt** (closest to UK users)
+   - Database Password: generate a strong one, save it in a password manager (you won't see it again)
+3. Wait ~1 minute for provisioning.
+4. On the project dashboard, left sidebar → **Project Settings** (gear icon) → **Database**.
+5. Scroll to **Connection string**. Switch the tab to **Transaction** (this is the pooled connection — the right one for serverless).
+6. Copy the URI. It looks like:
    ```
-   postgresql://neondb_owner:xxxxxx@ep-cool-name-12345-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+   postgresql://postgres.xxxxxxxxxxxxxxxx:[YOUR-PASSWORD]@aws-0-eu-west-2.pooler.supabase.com:6543/postgres
    ```
+7. Replace `[YOUR-PASSWORD]` in the string with the password you set in step 2.
 
-Keep this tab open.
+Keep this ready.
 
 ## 2. Deploy to Vercel
 
 1. Go to **https://vercel.com** → **Sign up** / **Log in** with the GitHub account that owns `CodyBromell/wurthletest`.
 2. Dashboard → **Add New…** → **Project**.
 3. Import `CodyBromell/wurthletest`.
-4. On the configuration screen:
-   - **Framework Preset**: Other (Vercel will auto-detect — leave as is)
+4. On the configuration screen leave the defaults:
+   - **Framework Preset**: Other (auto-detected)
    - **Root Directory**: `./`
-   - **Build Command**: leave empty (nothing to build)
-   - **Output Directory**: leave empty
-   - **Install Command**: `npm install` (default is fine)
-5. Expand **Environment Variables** and add:
-   - `DATABASE_URL` — paste the Neon connection string from step 1.
-   - `JWT_SECRET` — any random string. Generate one at https://randomkeygen.com/ or just type a long password.
-   - `NODE_ENV` — `production`
-6. Click **Deploy**. Wait ~90 seconds.
+   - **Build Command**: empty
+   - **Output Directory**: empty
+   - **Install Command**: default (`npm install`)
+5. Expand **Environment Variables** and add three:
+
+   | Name | Value |
+   |---|---|
+   | `DATABASE_URL` | Supabase pooler URI from step 1 (with password filled in) |
+   | `JWT_SECRET` | any long random string — https://randomkeygen.com → "CodeIgniter Encryption Keys" |
+   | `NODE_ENV` | `production` |
+
+6. Click **Deploy**. ~90 seconds.
 
 You'll get a URL like `wurthletest.vercel.app`. The game is at `/wurthle`.
 
 ## 3. Share with the team
 
-Send them `https://<your-vercel-url>/wurthle`. They sign in with any email and start playing. The November leaderboard will populate as users play — November 1-30 2026.
+Send `https://<your-vercel-url>/wurthle`. They sign in with any email and play. The November leaderboard populates as users play — campaign window is Nov 1–30 2026.
 
 ## Updating after a code change
 
@@ -45,36 +55,37 @@ git commit -m "..."
 git push
 ```
 
-Vercel auto-deploys every push to `main`. First visit after a deploy is fast — no cold-start penalty like Render had.
+Vercel auto-deploys every push to `main`.
 
 ## Local development
 
-You need a Postgres connection string to run locally too. Options:
-
-1. **Use the same Neon DB** — easiest. Set `DATABASE_URL` in a `.env` file (ignored by git) and run `npm start`. You'll share data with production though.
-2. **Create a Neon dev branch** — in Neon dashboard, click **Branches** → create one called `dev`. Use its connection string locally. Changes stay isolated.
+Set `DATABASE_URL` in a `.env` file (gitignored) and run `npm start`:
 
 ```bash
 # .env
-DATABASE_URL=postgresql://...
-JWT_SECRET=whatever-you-want
+DATABASE_URL=postgresql://postgres.xxxx:password@aws-0-eu-west-2.pooler.supabase.com:6543/postgres
+JWT_SECRET=anything-you-want
 ```
 
 ```bash
 npm install
 npm start   # http://localhost:3000/wurthle
-npm run seed # optional: seed sample review data
 ```
 
-## Hardening before real customer use
+To avoid colliding with production data, create a second Supabase project just for dev and use its connection string locally.
 
-1. **Real auth.** `POST /api/wurthle/login` accepts any email. Swap for magic-link verification or SSO from the Würth eshop session.
-2. **Rate limiting.** Nothing stops a bot spamming `/api/wurthle/guess` to brute-force the answer. Add `express-rate-limit` capped at ~30 req/min per IP.
-3. **CORS whitelist.** Currently open. Restrict to the eshop domain + the Vercel URL.
-4. **Voucher codes → SalesManago.** When someone redeems, push a tag to SalesManago so eshop checkout honours the discount (see Phase 2 in CLAUDE.md).
+## Hardening for production
+
+1. **Real auth** — `POST /api/wurthle/login` accepts any email. Swap for magic-link verification or SSO from the Würth eshop session.
+2. **Rate limiting** — nothing stops a bot spamming `/api/wurthle/guess`. Add `express-rate-limit` capped at ~30 req/min per IP.
+3. **CORS** — currently open. Lock to the eshop domain + Vercel URL.
+4. **Supabase Row Level Security** — not required (we use JWT auth in the app), but worth enabling as defence in depth.
+5. **Voucher codes → SalesManago** — push a tag on redeem so eshop checkout honours it (Phase 2 in CLAUDE.md).
 
 ## Troubleshooting
 
-- **"Database unavailable" on first load** — `DATABASE_URL` not set or wrong. Check Vercel → Project → Settings → Environment Variables. Make sure you used the **pooled** connection string.
-- **Function timeouts (10 s on Hobby plan)** — the first request after a long idle period waits for Neon to wake its DB. If it exceeds 10 s, Vercel kills it. Refresh and it works. Pro plan has 60 s timeout.
-- **November leaderboard still empty on 1 Nov** — the campaign window is set via `CAMPAIGN_START` / `CAMPAIGN_END` env vars. Defaults are 2026-11-01 to 2026-11-30. If you want a different window, override those in Vercel's env vars.
+- **"Database unavailable" or ECONNREFUSED on first load** — `DATABASE_URL` wrong. Verify in Vercel → Project → Settings → Environment Variables. Must be the **Transaction** pooler URI (port 6543), not the Direct connection.
+- **"password authentication failed"** — you forgot to substitute `[YOUR-PASSWORD]` in the connection string with your actual database password.
+- **"prepared statement already exists"** — the `prepare: false` option in `db.js` prevents this; it's required for Supabase's transaction-mode pooler. If you see it anyway, double-check `db.js` wasn't reverted.
+- **November leaderboard still empty on 1 Nov** — override `CAMPAIGN_START` / `CAMPAIGN_END` env vars in Vercel if you want a different window. Defaults are 2026-11-01 to 2026-11-30.
+- **Vercel function timeout (10 s on Hobby plan)** — rare for this app's query sizes. If it happens, Supabase pooler is overloaded; refresh works. Pro plan has 60 s.

@@ -1,15 +1,25 @@
-// Postgres via Neon's serverless (HTTP) driver — works in Vercel, Render,
-// and anywhere else that can hit a connection string over the internet.
-// Local dev: set DATABASE_URL to any Postgres URL (Neon has a free tier).
+// Postgres via postgres.js. Works with Supabase's connection pooler
+// (transaction mode, port 6543), Neon, or any Postgres connection string.
+// On Vercel: set DATABASE_URL to your Supabase pooler URL.
 
-const { neon } = require("@neondatabase/serverless");
+const postgres = require("postgres");
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-  console.warn("⚠ DATABASE_URL not set — every DB call will fail. Set it to your Neon connection string.");
+  console.warn("⚠ DATABASE_URL not set — every DB call will fail. Set it to your Supabase pooler connection string.");
 }
 
-const neonSql = DATABASE_URL ? neon(DATABASE_URL) : null;
+// Serverless-friendly config: one connection per invocation, short timeouts.
+// Supabase requires SSL.
+const sql = DATABASE_URL
+  ? postgres(DATABASE_URL, {
+      ssl: "require",
+      max: 1,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      prepare: false, // required for Supabase transaction-mode pooler
+    })
+  : null;
 
 // Convert `?` placeholders (SQLite style) to `$1, $2, ...` (Postgres style)
 // so we don't have to rewrite every query.
@@ -19,10 +29,11 @@ function convertPlaceholders(sqlText) {
 }
 
 async function query(sqlText, params = []) {
-  if (!neonSql) throw new Error("Database not configured (DATABASE_URL missing)");
+  if (!sql) throw new Error("Database not configured (DATABASE_URL missing)");
   const converted = convertPlaceholders(sqlText);
-  // @neondatabase/serverless returns rows as a plain array.
-  return await neonSql(converted, params);
+  // postgres.js returns a Result that's array-like; normalise to a plain array.
+  const rows = await sql.unsafe(converted, params);
+  return Array.from(rows);
 }
 
 // Idempotent schema migrations. Called once per cold-start on Vercel.
