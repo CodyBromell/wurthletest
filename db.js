@@ -101,12 +101,16 @@ async function getDb() {
       max_streak INTEGER DEFAULT 0,
       played INTEGER DEFAULT 0,
       wins INTEGER DEFAULT 0,
-      distribution TEXT DEFAULT '[0,0,0,0,0,0]',
+      distribution TEXT DEFAULT '[0,0,0,0,0]',
       balance INTEGER DEFAULT 0,
       last_played_date TEXT,
+      leaderboard_opt_in INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // Migrate existing DBs: add leaderboard_opt_in if missing.
+  try { db.run(`ALTER TABLE wurthle_users ADD COLUMN leaderboard_opt_in INTEGER DEFAULT 0`); } catch (e) { /* column already present */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS wurthle_puzzles (
@@ -136,9 +140,13 @@ async function getDb() {
       won INTEGER NOT NULL,
       attempts INTEGER NOT NULL,
       points_earned INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (user_email, puzzle_date)
     )
   `);
+
+  // Migrate: add created_at to legacy wurthle_results
+  try { db.run(`ALTER TABLE wurthle_results ADD COLUMN created_at TEXT DEFAULT (datetime('now'))`); } catch (e) { /* already there */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS wurthle_vouchers (

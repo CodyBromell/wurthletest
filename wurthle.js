@@ -42,6 +42,13 @@ const EXTRA_GUESSES = [
 const VALID_GUESSES = new Set([...ANSWERS, ...EXTRA_GUESSES]);
 
 const EPOCH = new Date("2026-01-01T00:00:00Z");
+const MAX_ATTEMPTS = 5;
+
+// ─── PLAY. SPEND. WIN. campaign window ───────────────────────────────
+// Leaderboard scopes points to this range.
+const CAMPAIGN_START = process.env.CAMPAIGN_START || "2026-11-01";
+const CAMPAIGN_END   = process.env.CAMPAIGN_END   || "2026-11-30";
+const LEADERBOARD_SIZE = 50;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function todayKey() {
@@ -232,6 +239,17 @@ router.get("/state", requireAuth, async (req, res) => {
       )
     );
 
+    // Campaign points (November total only — the leaderboard score)
+    const campaignRow = rowsFromExec(
+      db.exec(
+        `SELECT COALESCE(SUM(points_earned), 0) AS pts
+         FROM wurthle_results
+         WHERE user_email = ? AND puzzle_date BETWEEN ? AND ?`,
+        [email, CAMPAIGN_START, CAMPAIGN_END]
+      )
+    )[0];
+    const campaignPoints = campaignRow ? campaignRow.pts : 0;
+
     saveDb();
 
     res.json({
@@ -243,6 +261,7 @@ router.get("/state", requireAuth, async (req, res) => {
         won,
         gameOver,
         answer: gameOver ? puzzle.answer : null,
+        maxAttempts: MAX_ATTEMPTS,
       },
       stats: {
         played: user.played,
@@ -255,9 +274,100 @@ router.get("/state", requireAuth, async (req, res) => {
       pointsForToday: pointsForStreak(user.streak + (won ? 0 : 1)),
       vouchers,
       activity,
+      leaderboardOptIn: !!user.leaderboard_opt_in,
+      campaign: {
+        start: CAMPAIGN_START,
+        end: CAMPAIGN_END,
+        points: campaignPoints,
+      },
     });
   } catch (err) {
     console.error("wurthle/state error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/wurthle/opt-in ───────────────────────────────────────
+// Toggle leaderboard display consent.
+router.post("/opt-in", requireAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { email } = req.user;
+    const optIn = req.body.optIn ? 1 : 0;
+    db.run(
+      `UPDATE wurthle_users SET leaderboard_opt_in = ? WHERE email = ?`,
+      [optIn, email]
+    );
+    saveDb();
+    res.json({ success: true, leaderboardOptIn: !!optIn });
+  } catch (err) {
+    console.error("wurthle/opt-in error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/wurthle/leaderboard ───────────────────────────────────
+// Top N by campaign points. Tie-break: whoever reached their current
+// total first (earliest MAX(created_at) of their contributing results)
+// ranks higher. The signed-in user's own row is returned separately
+// so the UI can pin it even when they're outside the top N.
+function anonymiseName(name, email) {
+  const base = (name && name.trim()) || email.split("@")[0];
+  const parts = base.split(/\s+/);
+  if (parts.length >= 2) return parts[0] + " " + parts[1][0].toUpperCase() + ".";
+  // single name: show first part only, trimmed to 24 chars
+  return parts[0].slice(0, 24);
+}
+
+router.get("/leaderboard", requireAuth, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { email: me } = req.user;
+
+    // Full ranked list (one row per user with at least one campaign result).
+    // ORDER BY points DESC, earliest-max-created-at ASC — the user who
+    // reached their current total earlier wins the tie.
+    const fullRanked = rowsFromExec(
+      db.exec(
+        `SELECT
+            u.email AS email,
+            u.name AS name,
+            u.leaderboard_opt_in AS opt_in,
+            SUM(r.points_earned) AS points,
+            MAX(r.created_at) AS reached_at
+         FROM wurthle_results r
+         JOIN wurthle_users u ON u.email = r.user_email
+         WHERE r.puzzle_date BETWEEN ? AND ?
+         GROUP BY u.email, u.name, u.leaderboard_opt_in
+         HAVING SUM(r.points_earned) > 0
+         ORDER BY points DESC, reached_at ASC`,
+        [CAMPAIGN_START, CAMPAIGN_END]
+      )
+    );
+
+    // Attach rank, mask names based on opt-in.
+    const ranked = fullRanked.map((r, i) => ({
+      rank: i + 1,
+      displayName: r.opt_in ? anonymiseName(r.name, r.email) : "Anonymous player",
+      points: r.points,
+      isMe: r.email === me,
+      optedIn: !!r.opt_in,
+    }));
+
+    // Public leaderboard: top N, only opted-in rows show a real name
+    // (non-opted-in slots keep the "Anonymous player" placeholder so
+    // ranks stay faithful).
+    const top = ranked.slice(0, LEADERBOARD_SIZE);
+    const me_row = ranked.find((r) => r.isMe) || null;
+
+    res.json({
+      campaign: { start: CAMPAIGN_START, end: CAMPAIGN_END, size: LEADERBOARD_SIZE },
+      top,
+      me: me_row && me_row.rank > LEADERBOARD_SIZE ? me_row : null,
+      totalPlayers: ranked.length,
+    });
+  } catch (err) {
+    console.error("wurthle/leaderboard error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -298,7 +408,7 @@ router.post("/guess", requireAuth, async (req, res) => {
       )
     )[0].n;
 
-    if (attempts >= 6) {
+    if (attempts >= MAX_ATTEMPTS) {
       return res.status(400).json({ error: "No attempts left" });
     }
 
@@ -311,7 +421,7 @@ router.post("/guess", requireAuth, async (req, res) => {
     );
 
     const won = guess === puzzle.answer;
-    const finished = won || attemptNo === 6;
+    const finished = won || attemptNo === MAX_ATTEMPTS;
     let pointsEarned = 0;
     let newStreak = user.streak;
     let newBalance = user.balance;
@@ -319,6 +429,9 @@ router.post("/guess", requireAuth, async (req, res) => {
     let newPlayed = user.played;
     let newWins = user.wins;
     let distribution = JSON.parse(user.distribution);
+    // Trim or pad any legacy 6-slot distribution to MAX_ATTEMPTS.
+    while (distribution.length < MAX_ATTEMPTS) distribution.push(0);
+    if (distribution.length > MAX_ATTEMPTS) distribution = distribution.slice(0, MAX_ATTEMPTS);
 
     if (finished) {
       newPlayed += 1;
@@ -338,7 +451,7 @@ router.post("/guess", requireAuth, async (req, res) => {
         newMaxStreak = Math.max(newMaxStreak, newStreak);
         pointsEarned = pointsForStreak(newStreak);
         newBalance += pointsEarned;
-        addActivity(db, email, `Würthle #${puzzle.puzzle_no} solved (${attemptNo}/6)`, pointsEarned);
+        addActivity(db, email, `Würthle #${puzzle.puzzle_no} solved (${attemptNo}/${MAX_ATTEMPTS})`, pointsEarned);
       } else {
         newStreak = 0;
       }
