@@ -1,189 +1,190 @@
-const initSqlJs = require("sql.js");
-const fs = require("fs");
-const path = require("path");
+// Postgres via Neon's serverless (HTTP) driver — works in Vercel, Render,
+// and anywhere else that can hit a connection string over the internet.
+// Local dev: set DATABASE_URL to any Postgres URL (Neon has a free tier).
 
-// In production, set DB_PATH to a file on a persistent disk
-// (e.g. /data/reviews.db on Render, /app/data/reviews.db on Railway).
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "reviews.db");
+const { neon } = require("@neondatabase/serverless");
 
-let db;
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.warn("⚠ DATABASE_URL not set — every DB call will fail. Set it to your Neon connection string.");
+}
 
-async function getDb() {
-  if (db) return db;
+const neonSql = DATABASE_URL ? neon(DATABASE_URL) : null;
 
-  const SQL = await initSqlJs();
+// Convert `?` placeholders (SQLite style) to `$1, $2, ...` (Postgres style)
+// so we don't have to rewrite every query.
+function convertPlaceholders(sqlText) {
+  let n = 0;
+  return sqlText.replace(/\?/g, () => `$${++n}`);
+}
 
-  // Ensure the directory exists (for mounted-volume paths like /data)
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+async function query(sqlText, params = []) {
+  if (!neonSql) throw new Error("Database not configured (DATABASE_URL missing)");
+  const converted = convertPlaceholders(sqlText);
+  // @neondatabase/serverless returns rows as a plain array.
+  return await neonSql(converted, params);
+}
 
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
+// Idempotent schema migrations. Called once per cold-start on Vercel.
+let initDone = false;
+let initPromise = null;
+
+async function initDb() {
+  if (initDone) return;
+  if (initPromise) return initPromise;
+  if (!neonSql) throw new Error("DATABASE_URL not set");
+
+  initPromise = (async () => {
+    // ─── Review-system tables ───────────────────────────────────────
+    await query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sku TEXT UNIQUE,
+        image_url TEXT,
+        category TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        customer_email TEXT NOT NULL,
+        customer_name TEXT,
+        order_date TEXT NOT NULL,
+        delivered_date TEXT,
+        status TEXT DEFAULT 'delivered',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        quantity INTEGER DEFAULT 1
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS review_tokens (
+        id SERIAL PRIMARY KEY,
+        token TEXT UNIQUE NOT NULL,
+        order_id TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS reviews (
+        id SERIAL PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        order_id TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        customer_name TEXT,
+        rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+        title TEXT,
+        comment TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_tokens_token ON review_tokens(token)`);
+
+    // ─── Würthle game tables ────────────────────────────────────────
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_users (
+        email TEXT PRIMARY KEY,
+        name TEXT,
+        streak INTEGER DEFAULT 0,
+        max_streak INTEGER DEFAULT 0,
+        played INTEGER DEFAULT 0,
+        wins INTEGER DEFAULT 0,
+        distribution TEXT DEFAULT '[0,0,0,0,0]',
+        balance INTEGER DEFAULT 0,
+        last_played_date TEXT,
+        leaderboard_opt_in INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_puzzles (
+        date TEXT PRIMARY KEY,
+        puzzle_no INTEGER NOT NULL,
+        answer TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_attempts (
+        id SERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        puzzle_date TEXT NOT NULL,
+        attempt_no INTEGER NOT NULL,
+        guess TEXT NOT NULL,
+        result TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_results (
+        user_email TEXT NOT NULL,
+        puzzle_date TEXT NOT NULL,
+        won INTEGER NOT NULL,
+        attempts INTEGER NOT NULL,
+        points_earned INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_email, puzzle_date)
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_vouchers (
+        id SERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        code TEXT UNIQUE NOT NULL,
+        value INTEGER NOT NULL,
+        cost INTEGER NOT NULL,
+        expires_at TEXT NOT NULL,
+        redeemed INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS wurthle_activity (
+        id SERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        label TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(user_email, puzzle_date)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(user_email)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_vouchers ON wurthle_vouchers(user_email)`);
+
+    initDone = true;
+  })();
+
+  try {
+    await initPromise;
+  } catch (err) {
+    initPromise = null;
+    throw err;
   }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      sku TEXT UNIQUE,
-      image_url TEXT,
-      category TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id TEXT PRIMARY KEY,
-      customer_email TEXT NOT NULL,
-      customer_name TEXT,
-      order_date TEXT NOT NULL,
-      delivered_date TEXT,
-      status TEXT DEFAULT 'delivered',
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS order_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id TEXT NOT NULL,
-      product_id TEXT NOT NULL,
-      quantity INTEGER DEFAULT 1,
-      FOREIGN KEY (order_id) REFERENCES orders(id),
-      FOREIGN KEY (product_id) REFERENCES products(id)
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS review_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      token TEXT UNIQUE NOT NULL,
-      order_id TEXT NOT NULL,
-      customer_email TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      used INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (order_id) REFERENCES orders(id)
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS reviews (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id TEXT NOT NULL,
-      order_id TEXT NOT NULL,
-      customer_email TEXT NOT NULL,
-      customer_name TEXT,
-      rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
-      title TEXT,
-      comment TEXT,
-      status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (product_id) REFERENCES products(id),
-      FOREIGN KEY (order_id) REFERENCES orders(id)
-    )
-  `);
-
-  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_tokens_token ON review_tokens(token)`);
-
-  // ─── Würthle game tables ────────────────────────────────────────
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_users (
-      email TEXT PRIMARY KEY,
-      name TEXT,
-      streak INTEGER DEFAULT 0,
-      max_streak INTEGER DEFAULT 0,
-      played INTEGER DEFAULT 0,
-      wins INTEGER DEFAULT 0,
-      distribution TEXT DEFAULT '[0,0,0,0,0]',
-      balance INTEGER DEFAULT 0,
-      last_played_date TEXT,
-      leaderboard_opt_in INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Migrate existing DBs: add leaderboard_opt_in if missing.
-  try { db.run(`ALTER TABLE wurthle_users ADD COLUMN leaderboard_opt_in INTEGER DEFAULT 0`); } catch (e) { /* column already present */ }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_puzzles (
-      date TEXT PRIMARY KEY,
-      puzzle_no INTEGER NOT NULL,
-      answer TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_email TEXT NOT NULL,
-      puzzle_date TEXT NOT NULL,
-      attempt_no INTEGER NOT NULL,
-      guess TEXT NOT NULL,
-      result TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_results (
-      user_email TEXT NOT NULL,
-      puzzle_date TEXT NOT NULL,
-      won INTEGER NOT NULL,
-      attempts INTEGER NOT NULL,
-      points_earned INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      PRIMARY KEY (user_email, puzzle_date)
-    )
-  `);
-
-  // Migrate: add created_at to legacy wurthle_results
-  try { db.run(`ALTER TABLE wurthle_results ADD COLUMN created_at TEXT DEFAULT (datetime('now'))`); } catch (e) { /* already there */ }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_vouchers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_email TEXT NOT NULL,
-      code TEXT UNIQUE NOT NULL,
-      value INTEGER NOT NULL,
-      cost INTEGER NOT NULL,
-      expires_at TEXT NOT NULL,
-      redeemed INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS wurthle_activity (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_email TEXT NOT NULL,
-      label TEXT NOT NULL,
-      amount INTEGER NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(user_email, puzzle_date)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(user_email)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_w_vouchers ON wurthle_vouchers(user_email)`);
-
-  saveDb();
-  return db;
 }
 
-function saveDb() {
-  if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
-}
-
-module.exports = { getDb, saveDb };
+module.exports = { query, initDb };

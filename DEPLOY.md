@@ -1,58 +1,41 @@
-# Deploying Würthle
+# Deploying Würthle to Vercel
 
-This guide gets the team on a live `https://...` URL via Render. Total time: ~10 minutes.
+Vercel + Neon Postgres. Both free tiers. Total time ~10 minutes.
 
-## Why Render (and not Vercel/Netlify)
+## 1. Create the database (Neon)
 
-The app uses `sql.js` to write a `.db` file. Serverless hosts have read-only filesystems, so the DB would vanish on every request. Render (and Fly, Railway) give you a real disk.
+1. Go to **https://neon.tech** → **Sign up** (GitHub login is fastest).
+2. Create a project — any name, pick the EU (eu-central-1 Frankfurt or eu-west-2 London) region to minimise latency from UK users.
+3. On the project dashboard, click **Connection string** → **Pooled connection** (important: pooled). Copy the full `postgresql://…` string. Looks like:
 
-## One-time setup
+   ```
+   postgresql://neondb_owner:xxxxxx@ep-cool-name-12345-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+   ```
 
-### 1. Sign up
-- Go to https://render.com and sign in with the GitHub account that owns `CodyBromell/wurthletest`.
-- Authorise Render to read that repo.
+Keep this tab open.
 
-### 2. Deploy from the blueprint
-- Dashboard → **New** → **Blueprint**.
-- Pick the `wurthletest` repo.
-- Render reads `render.yaml` in this repo and proposes:
-  - Web service called `wurthle`, plan **Starter** ($7/mo)
-  - 1 GB persistent disk at `/data`
-  - Env vars: `NODE_ENV=production`, `JWT_SECRET` auto-generated, `DB_PATH=/data/reviews.db`
-- Click **Apply**.
+## 2. Deploy to Vercel
 
-### 3. Wait ~3 minutes for the first build
+1. Go to **https://vercel.com** → **Sign up** / **Log in** with the GitHub account that owns `CodyBromell/wurthletest`.
+2. Dashboard → **Add New…** → **Project**.
+3. Import `CodyBromell/wurthletest`.
+4. On the configuration screen:
+   - **Framework Preset**: Other (Vercel will auto-detect — leave as is)
+   - **Root Directory**: `./`
+   - **Build Command**: leave empty (nothing to build)
+   - **Output Directory**: leave empty
+   - **Install Command**: `npm install` (default is fine)
+5. Expand **Environment Variables** and add:
+   - `DATABASE_URL` — paste the Neon connection string from step 1.
+   - `JWT_SECRET` — any random string. Generate one at https://randomkeygen.com/ or just type a long password.
+   - `NODE_ENV` — `production`
+6. Click **Deploy**. Wait ~90 seconds.
 
-Watch the build log. When it says `Review system running at http://localhost:10000`, you're live.
+You'll get a URL like `wurthletest.vercel.app`. The game is at `/wurthle`.
 
-Your URL will be something like `https://wurthle.onrender.com`. The game is at `/wurthle`.
+## 3. Share with the team
 
-## Why Starter ($7/mo), not Free
-
-Render's free tier:
-- Doesn't allow persistent disks → SQLite file wipes on every restart, killing streaks.
-- Sleeps after 15 min idle → first hit each day is a 30 s cold start.
-
-For a daily-streak game shared with a team, neither of those works. Starter fixes both.
-
-If you want truly free, swap `sql.js` for managed Postgres (Neon free tier) and re-deploy — but that's a code change, not a config change. Ask Claude to do it if needed.
-
-## Sharing with the team
-
-Just send the URL: `https://wurthle.onrender.com/wurthle`.
-
-The login screen accepts any email — no verification. Anyone who knows the URL can sign in as anyone. **This is fine for an internal team prototype, NOT for production.** See "Hardening" below.
-
-## Hardening for real use
-
-In rough order of importance:
-
-1. **Real auth.** Swap the "any email accepted" `POST /api/wurthle/login` for either:
-   - A magic-link round-trip (email-verified one-time code) — reuse the JWT pattern from `tokens.js`.
-   - SSO from the Würth eshop session.
-2. **Rate-limit `/api/wurthle/guess`.** Right now anyone can spam-guess 50 000 times to brute-force the answer. Add `express-rate-limit` capped at maybe 30 requests/min per IP.
-3. **Lock down CORS.** `server.js` currently has `cors()` wide open. In production, restrict to the eshop domain.
-4. **Add a `/healthz` endpoint** so Render's health checks don't keep hitting `/`.
+Send them `https://<your-vercel-url>/wurthle`. They sign in with any email and start playing. The November leaderboard will populate as users play — November 1-30 2026.
 
 ## Updating after a code change
 
@@ -62,10 +45,36 @@ git commit -m "..."
 git push
 ```
 
-Render auto-deploys on every push to `main`. Build takes ~2 min.
+Vercel auto-deploys every push to `main`. First visit after a deploy is fast — no cold-start penalty like Render had.
+
+## Local development
+
+You need a Postgres connection string to run locally too. Options:
+
+1. **Use the same Neon DB** — easiest. Set `DATABASE_URL` in a `.env` file (ignored by git) and run `npm start`. You'll share data with production though.
+2. **Create a Neon dev branch** — in Neon dashboard, click **Branches** → create one called `dev`. Use its connection string locally. Changes stay isolated.
+
+```bash
+# .env
+DATABASE_URL=postgresql://...
+JWT_SECRET=whatever-you-want
+```
+
+```bash
+npm install
+npm start   # http://localhost:3000/wurthle
+npm run seed # optional: seed sample review data
+```
+
+## Hardening before real customer use
+
+1. **Real auth.** `POST /api/wurthle/login` accepts any email. Swap for magic-link verification or SSO from the Würth eshop session.
+2. **Rate limiting.** Nothing stops a bot spamming `/api/wurthle/guess` to brute-force the answer. Add `express-rate-limit` capped at ~30 req/min per IP.
+3. **CORS whitelist.** Currently open. Restrict to the eshop domain + the Vercel URL.
+4. **Voucher codes → SalesManago.** When someone redeems, push a tag to SalesManago so eshop checkout honours the discount (see Phase 2 in CLAUDE.md).
 
 ## Troubleshooting
 
-- **"FATAL: JWT_SECRET env var must be set in production"** in logs → the `render.yaml` env var didn't get applied; set it manually in the Render dashboard.
-- **All users see 0 points after a restart** → the disk isn't mounted. Check `DB_PATH` resolves to `/data/reviews.db` and a disk is attached.
-- **502 Bad Gateway** for ~30 s after the first request of the day → that's free-tier cold start. Confirm you're on Starter, not Free.
+- **"Database unavailable" on first load** — `DATABASE_URL` not set or wrong. Check Vercel → Project → Settings → Environment Variables. Make sure you used the **pooled** connection string.
+- **Function timeouts (10 s on Hobby plan)** — the first request after a long idle period waits for Neon to wake its DB. If it exceeds 10 s, Vercel kills it. Refresh and it works. Pro plan has 60 s timeout.
+- **November leaderboard still empty on 1 Nov** — the campaign window is set via `CAMPAIGN_START` / `CAMPAIGN_END` env vars. Defaults are 2026-11-01 to 2026-11-30. If you want a different window, override those in Vercel's env vars.

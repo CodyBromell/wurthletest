@@ -1,17 +1,19 @@
-const { getDb, saveDb } = require("./db");
+// Dev-only: seed sample review-system data. Needs DATABASE_URL set.
+// `npm run seed`
+
+const { query, initDb } = require("./db");
 const { generateToken } = require("./tokens");
 
 async function seed() {
-  const db = await getDb();
+  await initDb();
 
   // Clear existing data
-  db.run("DELETE FROM reviews");
-  db.run("DELETE FROM order_items");
-  db.run("DELETE FROM review_tokens");
-  db.run("DELETE FROM orders");
-  db.run("DELETE FROM products");
+  await query("DELETE FROM reviews");
+  await query("DELETE FROM order_items");
+  await query("DELETE FROM review_tokens");
+  await query("DELETE FROM orders");
+  await query("DELETE FROM products");
 
-  // Sample Würth products
   const products = [
     { id: "WTH-001", name: "ASSY Plus VG Screw 4.0x40mm (200pc)", sku: "WTH-ASSY-4040", imageUrl: "https://placehold.co/300x300/1a1a2e/e0e0e0?text=ASSY+Screw", category: "Fasteners" },
     { id: "WTH-002", name: "ORSY System Case 8.4.1", sku: "WTH-ORSY-841", imageUrl: "https://placehold.co/300x300/1a1a2e/e0e0e0?text=ORSY+Case", category: "Storage" },
@@ -21,27 +23,26 @@ async function seed() {
   ];
 
   for (const p of products) {
-    db.run(
-      `INSERT INTO products (id, name, sku, image_url, category) VALUES (?, ?, ?, ?, ?)`,
+    await query(
+      `INSERT INTO products (id, name, sku, image_url, category) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO NOTHING`,
       [p.id, p.name, p.sku, p.imageUrl, p.category]
     );
   }
 
-  // Sample order
   const orderId = "ORD-2026-00142";
-  db.run(
-    `INSERT INTO orders (id, customer_email, customer_name, order_date, delivered_date, status) 
-     VALUES (?, ?, ?, datetime('now', '-10 days'), datetime('now'), 'delivered')`,
+  await query(
+    `INSERT INTO orders (id, customer_email, customer_name, order_date, delivered_date, status)
+     VALUES (?, ?, ?, NOW() - INTERVAL '10 days', NOW(), 'delivered')
+     ON CONFLICT (id) DO UPDATE SET delivered_date = NOW()`,
     [orderId, "john.smith@example.com", "John Smith"]
   );
 
-  // Order items (customer bought 3 products)
   const orderedProducts = [products[0], products[2], products[3]];
   for (const p of orderedProducts) {
-    db.run(`INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, 1)`, [orderId, p.id]);
+    await query(`INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, 1)`, [orderId, p.id]);
   }
 
-  // Generate a review token
   const token = generateToken({
     orderId,
     customerEmail: "john.smith@example.com",
@@ -50,12 +51,11 @@ async function seed() {
   });
 
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  db.run(
+  await query(
     `INSERT INTO review_tokens (token, order_id, customer_email, expires_at) VALUES (?, ?, ?, ?)`,
     [token, orderId, "john.smith@example.com", expiresAt]
   );
 
-  // Add some existing approved reviews on products for the widget demo
   const sampleReviews = [
     { productId: "WTH-001", email: "mike.t@example.com", name: "Mike Taylor", rating: 5, title: "Best screws I've used", comment: "Perfect for timber framing. Self-drilling tip saves so much time compared to standard screws. Will definitely reorder." },
     { productId: "WTH-001", email: "sarah.j@example.com", name: "Sarah Jenkins", rating: 4, title: "Great quality, slightly pricey", comment: "Excellent holding power and the ASSY thread design really works. Only downside is the cost vs standard screws, but you get what you pay for." },
@@ -66,27 +66,20 @@ async function seed() {
   ];
 
   for (const r of sampleReviews) {
-    db.run(
+    await query(
       `INSERT INTO reviews (product_id, order_id, customer_email, customer_name, rating, title, comment, status)
        VALUES (?, 'SEED', ?, ?, ?, ?, ?, 'approved')`,
       [r.productId, r.email, r.name, r.rating, r.title, r.comment]
     );
   }
 
-  saveDb();
-
   console.log("--- Seed complete ---");
   console.log(`Products: ${products.length}`);
-  console.log(`Order: ${orderId} (${orderedProducts.length} items)`);
+  console.log(`Order: ${orderId}`);
   console.log(`Sample reviews: ${sampleReviews.length} (approved)`);
   console.log("");
   console.log("Review form URL:");
   console.log(`http://localhost:3000/review?token=${token}`);
-  console.log("");
-  console.log("Widget demo URLs:");
-  console.log("http://localhost:3000/widget-demo?product=WTH-001");
-  console.log("http://localhost:3000/widget-demo?product=WTH-003");
-  console.log("http://localhost:3000/widget-demo?product=WTH-004");
 }
 
 seed().catch(console.error);
