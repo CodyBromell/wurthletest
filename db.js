@@ -43,7 +43,7 @@ let initPromise = null;
 async function initDb() {
   if (initDone) return;
   if (initPromise) return initPromise;
-  if (!neonSql) throw new Error("DATABASE_URL not set");
+  if (!sql) throw new Error("DATABASE_URL not set");
 
   initPromise = (async () => {
     // ─── Review-system tables ───────────────────────────────────────
