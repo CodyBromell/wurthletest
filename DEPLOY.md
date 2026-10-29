@@ -45,7 +45,9 @@ You'll get a URL like `wurthletest.vercel.app`. The game is at `/wurthle`.
 
 ## 3. Share with the team
 
-Send `https://<your-vercel-url>/wurthle`. They sign in with any email and play. The November leaderboard populates as users play — campaign window is Nov 1–30 2026.
+Send `https://<your-vercel-url>/wurthle`. Customers click **Create account**, enter their Würth customer number (starts with 308), name and a password, then sign in with customer number + password from then on.
+
+**Resetting a customer's password:** there's no "forgot password" flow yet. In Supabase → Table Editor → `wurthle_users`, find their `customer_number` and clear the `password_hash` cell. They can then use **Create account** again with the same number and keep their points and streak. The November leaderboard populates as users play — campaign window is Nov 1–30 2026.
 
 ## Updating after a code change
 
@@ -76,7 +78,7 @@ To avoid colliding with production data, create a second Supabase project just f
 
 ## Hardening for production
 
-1. **Real auth** — `POST /api/wurthle/login` accepts any email. Swap for magic-link verification or SSO from the Würth eshop session.
+1. **Verify customer numbers** — accounts use customer number + password (scrypt-hashed, 15-minute lockout after 10 wrong passwords), but numbers aren't checked against Würth's customer records, so the first person to register a number owns it. Before prizes depend on it, validate numbers against the eshop/ERP or switch to eshop SSO.
 2. **Rate limiting** — nothing stops a bot spamming `/api/wurthle/guess`. Add `express-rate-limit` capped at ~30 req/min per IP.
 3. **CORS** — currently open. Lock to the eshop domain + Vercel URL.
 4. **Supabase Row Level Security** — not required (we use JWT auth in the app), but worth enabling as defence in depth.

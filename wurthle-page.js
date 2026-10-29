@@ -1,6 +1,8 @@
 // Würthle game page — served at /wurthle
 // All state lives on the server; this client just renders.
 
+const { WURTH_LOGO_SRC } = require("./wurth-logo");
+
 function getWurthleHTML() {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -166,8 +168,8 @@ function getWurthleHTML() {
   }
   .brand-block { text-align: center; flex: 1; }
   .brand-mark {
-    display: block; margin: 0 auto 10px;
-    width: 44px; height: 44px;
+    display: block; margin: 0 auto 12px;
+    width: 120px; height: auto;
   }
   .brand-title {
     font-size: 28px; font-weight: 700;
@@ -576,18 +578,21 @@ function getWurthleHTML() {
     padding: 64px 24px;
   }
   .login-screen.show { display: flex; }
-  .login-logo {
-    width: 72px; height: 72px;
-    background: linear-gradient(135deg, #CC0000, #880000);
-    color: #fff;
-    border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 32px;
-    margin-bottom: 22px;
-    box-shadow: 0 8px 24px rgba(204,0,0,0.3);
-    letter-spacing: -0.02em;
-  }
+  .login-logo { width: 200px; height: auto; display: block; margin-bottom: 28px; }
   .login-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .auth-tabs {
+    display: flex; width: 100%; max-width: 320px;
+    background: var(--surface); border-radius: 100px; padding: 4px;
+    box-shadow: var(--shadow-sm); margin-bottom: 18px;
+  }
+  .auth-tab {
+    flex: 1; padding: 9px 6px; border: none; background: transparent;
+    font-size: 13px; font-weight: 500; color: var(--muted);
+    border-radius: 100px; cursor: pointer; transition: all 0.2s var(--ease);
+  }
+  .auth-tab.active { background: var(--ink); color: #fff; }
+  .auth-form:not(.active) { display: none; }
+  .field-hint { font-size: 11.5px; color: var(--muted); margin: -4px 2px 2px; line-height: 1.4; }
   .login-sub {
     font-size: 13.5px; color: var(--muted);
     margin-bottom: 26px; text-align: center;
@@ -704,14 +709,31 @@ function getWurthleHTML() {
 
   <!-- ─── Login screen ─── -->
   <div id="login-screen" class="login-screen">
-    <div class="login-logo">W</div>
+    <img class="login-logo" src="${WURTH_LOGO_SRC}" alt="Würth" />
     <div class="login-title">Würthle</div>
-    <div class="login-sub">Sign in with your Würth account email to play today's puzzle and start collecting loyalty points.</div>
-    <form class="login-form" id="login-form" onsubmit="return false;">
-      <input type="text" id="login-name" placeholder="Your name (optional)" autocomplete="name" />
-      <input type="email" id="login-email" placeholder="email@example.com" required autocomplete="email" />
+    <div class="login-sub">Play the daily word puzzle and collect loyalty points with your Würth customer number.</div>
+
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab active" data-auth="login" role="tab">Sign in</button>
+      <button type="button" class="auth-tab" data-auth="register" role="tab">Create account</button>
+    </div>
+
+    <form class="login-form auth-form active" id="login-form" novalidate>
+      <input type="text" id="login-customer" placeholder="Customer number, e.g. 3081234…" inputmode="numeric" autocomplete="username" />
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
       <button type="submit" id="login-btn">Sign in &amp; play</button>
       <div class="login-error" id="login-error"></div>
+    </form>
+
+    <form class="login-form auth-form" id="register-form" novalidate>
+      <input type="text" id="reg-customer" placeholder="Customer number, e.g. 3081234…" inputmode="numeric" autocomplete="username" />
+      <div class="field-hint">Your Würth customer number — it starts with 308.</div>
+      <input type="text" id="reg-name" placeholder="Your name" autocomplete="name" maxlength="60" />
+      <div class="field-hint">Shown as e.g. “Jamie B.” if you join the leaderboard.</div>
+      <input type="password" id="reg-password" placeholder="Create a password (8+ characters)" autocomplete="new-password" />
+      <input type="password" id="reg-password2" placeholder="Confirm password" autocomplete="new-password" />
+      <button type="submit" id="register-btn">Create account &amp; play</button>
+      <div class="login-error" id="register-error"></div>
     </form>
   </div>
 
@@ -747,12 +769,7 @@ function getWurthleHTML() {
       <div class="game-header">
         <button id="helpbtn" class="icon-btn" title="How to play" aria-label="How to play">?</button>
         <div class="brand-block">
-          <svg class="brand-mark" viewBox="0 0 100 100" role="img" aria-label="Würth">
-            <rect x="0" y="0" width="100" height="50" fill="#CC0000"/>
-            <rect x="0" y="50" width="100" height="50" fill="#121212"/>
-            <path d="M 50 18 L 38 50 L 50 50 L 62 50 Z" fill="#FFF"/>
-            <text x="50" y="82" font-family="DM Sans, Arial" font-size="22" font-weight="700" fill="#FFF" text-anchor="middle" letter-spacing="2">WÜRTH</text>
-          </svg>
+          <img class="brand-mark" src="${WURTH_LOGO_SRC}" alt="Würth" />
           <div class="brand-title">W&uuml;rthle</div>
           <div class="brand-sub" id="datelabel">Daily word</div>
         </div>
@@ -990,7 +1007,8 @@ function getWurthleHTML() {
     absent:  { bg: 'var(--tile-absent)',  fg: 'var(--tile-absent-ink)' }
   };
   const MAX_ATTEMPTS = 5;
-  const TOKEN_KEY = 'wurthle_jwt';
+  const TOKEN_KEY = 'wurthle_session';
+  try { localStorage.removeItem('wurthle_jwt'); } catch (e) {}
 
   let token = localStorage.getItem(TOKEN_KEY);
   let state = null;
@@ -1031,29 +1049,72 @@ function getWurthleHTML() {
     document.getElementById('app-shell').classList.add('show');
   }
 
+  function showAuthForm(which) {
+    document.querySelectorAll('.auth-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.auth === which); });
+    document.getElementById('login-form').classList.toggle('active', which === 'login');
+    document.getElementById('register-form').classList.toggle('active', which === 'register');
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('register-error').textContent = '';
+  }
+  document.querySelectorAll('.auth-tab').forEach(function(t) {
+    t.addEventListener('click', function() { showAuthForm(t.dataset.auth); });
+  });
+
+  function cleanCustomerNumber(v) { return v.replace(/\\s+/g, ''); }
+  const CUSTOMER_RE = /^308\\d{4,9}$/;
+
+  async function startSession(data) {
+    token = data.token;
+    localStorage.setItem(TOKEN_KEY, token);
+    ['login-password', 'reg-password', 'reg-password2'].forEach(function(id) { document.getElementById(id).value = ''; });
+    await boot();
+  }
+
   document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
-    const name = document.getElementById('login-name').value.trim();
+    const customerNumber = cleanCustomerNumber(document.getElementById('login-customer').value);
+    const password = document.getElementById('login-password').value;
     const btn = document.getElementById('login-btn');
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
-    if (!email) { errEl.textContent = 'Email required'; return; }
-    btn.disabled = true; btn.textContent = 'Signing in...';
+    if (!customerNumber || !password) { errEl.textContent = 'Enter your customer number and password.'; return; }
+    btn.disabled = true; btn.textContent = 'Signing in…';
     try {
-      const data = await api('/login', 'POST', { email: email, name: name });
-      token = data.token;
-      localStorage.setItem(TOKEN_KEY, token);
-      await boot();
+      await startSession(await api('/login', 'POST', { customerNumber: customerNumber, password: password }));
     } catch (err) {
       errEl.textContent = err.message;
+    } finally {
       btn.disabled = false; btn.textContent = 'Sign in & play';
+    }
+  });
+
+  document.getElementById('register-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const customerNumber = cleanCustomerNumber(document.getElementById('reg-customer').value);
+    const name = document.getElementById('reg-name').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const password2 = document.getElementById('reg-password2').value;
+    const btn = document.getElementById('register-btn');
+    const errEl = document.getElementById('register-error');
+    errEl.textContent = '';
+    if (!CUSTOMER_RE.test(customerNumber)) { errEl.textContent = 'Enter your Würth customer number — it starts with 308.'; return; }
+    if (name.length < 2) { errEl.textContent = 'Enter your name.'; return; }
+    if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+    if (password !== password2) { errEl.textContent = 'Passwords don\\'t match.'; return; }
+    btn.disabled = true; btn.textContent = 'Creating account…';
+    try {
+      await startSession(await api('/register', 'POST', { customerNumber: customerNumber, name: name, password: password }));
+    } catch (err) {
+      errEl.textContent = err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create account & play';
     }
   });
 
   document.getElementById('logout-btn').addEventListener('click', function() {
     localStorage.removeItem(TOKEN_KEY);
     token = null;
+    showAuthForm('login');
     showLogin();
   });
 
@@ -1189,10 +1250,10 @@ function getWurthleHTML() {
     answer = s.today.answer;
     gameOver = s.today.gameOver;
 
-    const initials = (s.user.name || s.user.email).split(/\\s+/).map(function(p) { return p[0]; }).join('').slice(0,2).toUpperCase();
-    document.getElementById('user-avatar').textContent = initials || '?';
-    document.getElementById('user-name').textContent = s.user.name || s.user.email;
-    document.getElementById('user-email').textContent = 'Account · ' + s.user.email;
+    const initials = (s.user.name || '').split(/\\s+/).filter(Boolean).map(function(p) { return p[0]; }).join('').slice(0,2).toUpperCase();
+    document.getElementById('user-avatar').textContent = initials || 'W';
+    document.getElementById('user-name').textContent = s.user.name || 'Würthle player';
+    document.getElementById('user-email').textContent = 'Customer ' + s.user.customerNumber;
 
     document.getElementById('balance-val').textContent = s.balance + ' pts';
     document.getElementById('streak-val').textContent = s.stats.streak;

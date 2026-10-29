@@ -10,10 +10,10 @@ if (!DATABASE_URL) {
 }
 
 // Serverless-friendly config: one connection per invocation, short timeouts.
-// Supabase requires SSL.
+// Supabase requires SSL; DATABASE_SSL=disable is for a local Postgres only.
 const sql = DATABASE_URL
   ? postgres(DATABASE_URL, {
-      ssl: "require",
+      ssl: process.env.DATABASE_SSL === "disable" ? false : "require",
       max: 1,
       idle_timeout: 20,
       connect_timeout: 10,
@@ -113,8 +113,11 @@ async function initDb() {
     // ─── Würthle game tables ────────────────────────────────────────
     await query(`
       CREATE TABLE IF NOT EXISTS wurthle_users (
-        email TEXT PRIMARY KEY,
+        customer_number TEXT PRIMARY KEY,
         name TEXT,
+        password_hash TEXT,
+        failed_logins INTEGER DEFAULT 0,
+        locked_until TIMESTAMPTZ,
         streak INTEGER DEFAULT 0,
         max_streak INTEGER DEFAULT 0,
         played INTEGER DEFAULT 0,
@@ -139,7 +142,7 @@ async function initDb() {
     await query(`
       CREATE TABLE IF NOT EXISTS wurthle_attempts (
         id SERIAL PRIMARY KEY,
-        user_email TEXT NOT NULL,
+        customer_number TEXT NOT NULL,
         puzzle_date TEXT NOT NULL,
         attempt_no INTEGER NOT NULL,
         guess TEXT NOT NULL,
@@ -150,20 +153,20 @@ async function initDb() {
 
     await query(`
       CREATE TABLE IF NOT EXISTS wurthle_results (
-        user_email TEXT NOT NULL,
+        customer_number TEXT NOT NULL,
         puzzle_date TEXT NOT NULL,
         won INTEGER NOT NULL,
         attempts INTEGER NOT NULL,
         points_earned INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (user_email, puzzle_date)
+        PRIMARY KEY (customer_number, puzzle_date)
       )
     `);
 
     await query(`
       CREATE TABLE IF NOT EXISTS wurthle_vouchers (
         id SERIAL PRIMARY KEY,
-        user_email TEXT NOT NULL,
+        customer_number TEXT NOT NULL,
         code TEXT UNIQUE NOT NULL,
         value INTEGER NOT NULL,
         cost INTEGER NOT NULL,
@@ -176,16 +179,38 @@ async function initDb() {
     await query(`
       CREATE TABLE IF NOT EXISTS wurthle_activity (
         id SERIAL PRIMARY KEY,
-        user_email TEXT NOT NULL,
+        customer_number TEXT NOT NULL,
         label TEXT NOT NULL,
         amount INTEGER NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(user_email, puzzle_date)`);
-    await query(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(user_email)`);
-    await query(`CREATE INDEX IF NOT EXISTS idx_w_vouchers ON wurthle_vouchers(user_email)`);
+    // Tables created before customer-number sign-in were keyed by email.
+    // Rename those columns in place (keeps any rows) instead of dropping.
+    await query(`
+      DO $$
+      DECLARE t TEXT;
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = current_schema() AND table_name = 'wurthle_users' AND column_name = 'email') THEN
+          ALTER TABLE wurthle_users RENAME COLUMN email TO customer_number;
+        END IF;
+        FOREACH t IN ARRAY ARRAY['wurthle_attempts','wurthle_results','wurthle_vouchers','wurthle_activity'] LOOP
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_schema = current_schema() AND table_name = t AND column_name = 'user_email') THEN
+            EXECUTE format('ALTER TABLE %I RENAME COLUMN user_email TO customer_number', t);
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS failed_logins INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ`);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(customer_number, puzzle_date)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(customer_number)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_w_vouchers ON wurthle_vouchers(customer_number)`);
 
     initDone = true;
   })();
