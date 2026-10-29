@@ -281,16 +281,6 @@ ${BASE_CSS}
     font-feature-settings: 'ss01';
   }
   .big-balance-sub { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
-  .progress-track {
-    background: var(--line); height: 6px; border-radius: 100px;
-    margin-top: 12px; overflow: hidden;
-  }
-  .progress-bar {
-    background: linear-gradient(90deg, #CC0000, #FF4040);
-    height: 100%; width: 0%;
-    border-radius: 100px;
-    transition: width 0.6s var(--ease);
-  }
   .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .stat-cell { text-align: left; }
   .stat-cell-val { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
@@ -476,57 +466,6 @@ ${BASE_CSS}
   }
   .lb-optin-cta:hover { background: var(--wurth-red); }
 
-  /* ─── Reward cards ───────────────────────────────────────── */
-  .reward-card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 16px;
-    display: flex; gap: 14px; align-items: center;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-  }
-  .reward-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-  .reward-icon {
-    width: 54px; height: 54px;
-    background: linear-gradient(135deg, #CC0000, #A30000);
-    color: #fff; border-radius: var(--radius-sm);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; font-weight: 700; font-size: 14px;
-    box-shadow: 0 3px 8px rgba(204,0,0,0.25);
-  }
-  .reward-body { flex: 1; min-width: 0; }
-  .reward-name { font-size: 14.5px; font-weight: 500; margin-bottom: 2px; letter-spacing: -0.005em; }
-  .reward-sub { font-size: 12px; color: var(--muted); margin-bottom: 6px; line-height: 1.3; }
-  .reward-cost { font-size: 12px; font-weight: 600; color: var(--wurth-red); letter-spacing: 0.01em; }
-  .redeem-btn {
-    height: 40px; min-width: 92px;
-    background: var(--wurth-red); color: #fff;
-    border: none; border-radius: 100px;
-    padding: 0 16px;
-    font-size: 12.5px; font-weight: 600; cursor: pointer;
-    transition: all 0.15s var(--ease);
-  }
-  .redeem-btn:hover:not(:disabled) { background: var(--wurth-red-dk); }
-  .redeem-btn:disabled {
-    background: var(--line); color: var(--muted);
-    cursor: not-allowed; font-size: 11px;
-  }
-
-  .voucher-item {
-    background: var(--surface);
-    border-radius: var(--radius-sm);
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    display: flex; justify-content: space-between; align-items: center;
-    box-shadow: var(--shadow-sm);
-  }
-  .voucher-val { font-weight: 600; font-size: 14px; }
-  .voucher-code { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'DM Mono', monospace; letter-spacing: 0.02em; }
-  .voucher-badge {
-    font-size: 10px; color: var(--success); font-weight: 600;
-    letter-spacing: 0.1em;
-  }
-
   /* ─── Login screen ───────────────────────────────────────── */
   .login-screen {
     display: none; flex-direction: column; align-items: center;
@@ -660,11 +599,11 @@ ${BASE_CSS}
   /* ─── Würth type: Extra Bold Condensed for headings, numbers, tiles
      and buttons; everything else stays in Wuerth Book (set on body). ── */
   .brand-title, .login-title, .overlay-title, .lb-hero-title, .lb-empty-title,
-  .end-status, .card-label, .lb-hero-eyebrow, .opt-title, .reward-name,
+  .end-status, .card-label, .lb-hero-eyebrow, .opt-title,
   .big-balance, .stat-cell-val, .stat-chip-val, .lb-stat-val, .balance-val,
-  .lb-rank, .lb-points, .voucher-val, .reward-icon, .reward-cost, .avatar,
+  .lb-rank, .lb-points, .avatar,
   .wurthle-tile, .example-tile, .wurthle-key, .dist-bar,
-  .btn, .redeem-btn, .login-form button, .lb-optin-cta, .lb-me-chip {
+  .btn, .login-form button, .lb-optin-cta, .lb-me-chip {
     font-family: var(--font-head);
     font-weight: 800;
     letter-spacing: 0.01em;
@@ -675,19 +614,19 @@ ${BASE_CSS}
   .lb-hero-title { font-size: 27px; line-height: 1.1; }
   .end-status    { font-size: 21px; }
   .card-label    { font-size: 12.5px; letter-spacing: 0.06em; }
-  .opt-title, .reward-name { font-size: 16px; }
+  .opt-title { font-size: 16px; }
   .big-balance   { font-size: 42px; }
   .stat-cell-val { font-size: 26px; }
   .wurthle-tile  { font-size: 34px; }
   .wurthle-key   { font-size: 17px; letter-spacing: 0.03em; }
   .wurthle-key.wide { font-size: 13px; }
-  .btn, .redeem-btn, .login-form button, .lb-optin-cta { font-size: 15px; letter-spacing: 0.03em; }
+  .btn, .login-form button, .lb-optin-cta { font-size: 15px; letter-spacing: 0.03em; }
 
   /* Wuerth Book runs small next to the old DM Sans sizes */
   .login-sub { font-size: 15px; }
   .login-form input { font-size: 15px; }
   .auth-tab, .tab-btn { font-size: 14px; }
-  .field-hint, .account-sub, .brand-sub, .end-points, .reward-sub, .opt-sub, .lb-hero-sub { font-size: 13px; }
+  .field-hint, .account-sub, .brand-sub, .end-points, .opt-sub, .lb-hero-sub { font-size: 13px; }
   .account-name, .activity-row, .lb-row, .ex-caption { font-size: 14.5px; }
 
   .terms-link { margin-top: 22px; font-size: 13.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -748,7 +687,7 @@ ${BASE_CSS}
         </div>
       </div>
       <div class="balance-pill">
-        <span class="balance-label">Balance</span>
+        <span class="balance-label">Points</span>
         <span class="balance-val" id="balance-val">0 pts</span>
       </div>
     </div>
@@ -757,7 +696,6 @@ ${BASE_CSS}
       <button class="tab-btn active" data-tab="game">Puzzle</button>
       <button class="tab-btn" data-tab="leaderboard">Leaderboard</button>
       <button class="tab-btn" data-tab="account">Account</button>
-      <button class="tab-btn" data-tab="rewards">Rewards</button>
     </div>
 
     <div id="toast" class="wurthle-toast"></div>
@@ -797,7 +735,7 @@ ${BASE_CSS}
         <div id="endpoints" class="end-points"></div>
         <div class="end-actions">
           <button id="sharebtn" class="btn btn-primary">Share result</button>
-          <button id="gotorewardsbtn" class="btn btn-ghost">View rewards →</button>
+          <button id="gotoleaderboardbtn" class="btn btn-ghost">View leaderboard →</button>
         </div>
       </div>
     </div>
@@ -839,12 +777,8 @@ ${BASE_CSS}
     <!-- ─── Account tab ─── -->
     <div class="tab-panel" id="tab-account">
       <div class="card">
-        <div class="card-label">Loyalty balance</div>
+        <div class="card-label">Your points</div>
         <div class="big-balance" id="acc-balance">0 pts</div>
-        <div class="big-balance-sub" id="acc-progress">100 pts away from your next £10 voucher</div>
-        <div class="progress-track">
-          <div id="progress-bar" class="progress-bar"></div>
-        </div>
       </div>
 
       <div class="card">
@@ -881,46 +815,6 @@ ${BASE_CSS}
         <div class="card-label">Recent activity</div>
         <div id="activity-list">
           <div class="empty-note">No activity yet — play today's puzzle to start earning.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ─── Rewards tab ─── -->
-    <div class="tab-panel" id="tab-rewards">
-      <div class="card-label" style="margin-bottom: 12px; margin-left: 2px;">Available rewards</div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <div class="reward-card">
-          <div class="reward-icon">£10</div>
-          <div class="reward-body">
-            <div class="reward-name">£10 discount voucher</div>
-            <div class="reward-sub">Valid on orders over £50 · expires 90 days</div>
-            <div class="reward-cost">100 points</div>
-          </div>
-          <button class="redeem-btn" data-reward="10" data-cost="100">Redeem</button>
-        </div>
-        <div class="reward-card">
-          <div class="reward-icon">£25</div>
-          <div class="reward-body">
-            <div class="reward-name">£25 discount voucher</div>
-            <div class="reward-sub">Valid on orders over £100 · expires 90 days</div>
-            <div class="reward-cost">240 points</div>
-          </div>
-          <button class="redeem-btn" data-reward="25" data-cost="240">Redeem</button>
-        </div>
-        <div class="reward-card">
-          <div class="reward-icon">£50</div>
-          <div class="reward-body">
-            <div class="reward-name">£50 discount voucher</div>
-            <div class="reward-sub">Valid on orders over £200 · expires 90 days</div>
-            <div class="reward-cost">450 points</div>
-          </div>
-          <button class="redeem-btn" data-reward="50" data-cost="450">Redeem</button>
-        </div>
-      </div>
-      <div style="margin-top: 24px;">
-        <div class="card-label" style="margin-left: 2px;">Your vouchers</div>
-        <div id="voucher-list">
-          <div class="empty-note">No vouchers yet — redeem points to claim one.</div>
         </div>
       </div>
     </div>
@@ -1262,7 +1156,7 @@ ${BASE_CSS}
     if (won) {
       const labels = ['Genius!','Impressive!','Splendid!','Great!','Phew!'];
       document.getElementById('endstatus').textContent = labels[attempts - 1] || 'Solved!';
-      document.getElementById('endpoints').innerHTML = 'Solved in ' + attempts + '/' + MAX_ATTEMPTS + ' · <strong>+' + pointsEarned + ' pts</strong> · Balance: ' + balance + ' pts';
+      document.getElementById('endpoints').innerHTML = 'Solved in ' + attempts + '/' + MAX_ATTEMPTS + ' · <strong>+' + pointsEarned + ' pts</strong> · Total: ' + balance + ' pts';
     } else {
       document.getElementById('endstatus').textContent = 'The word was ' + answer;
       document.getElementById('endpoints').textContent = 'Streak reset · come back tomorrow';
@@ -1287,11 +1181,6 @@ ${BASE_CSS}
     document.getElementById('datelabel').textContent = new Date(s.today.date + 'T00:00:00').toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
 
     document.getElementById('acc-balance').textContent = s.balance + ' pts';
-    const toNext = Math.max(0, 100 - s.balance);
-    document.getElementById('acc-progress').textContent = toNext > 0
-      ? toNext + ' pts away from your next £10 voucher'
-      : 'You can redeem a £10 voucher now';
-    document.getElementById('progress-bar').style.width = Math.min(100, s.balance) + '%';
     document.getElementById('acc-played').textContent = s.stats.played;
     document.getElementById('acc-won').textContent = s.stats.wins;
     document.getElementById('acc-streak').textContent = s.stats.streak;
@@ -1304,8 +1193,6 @@ ${BASE_CSS}
     if (s.mustChangePassword && !pwModal.classList.contains('show')) openPasswordModal(true);
 
     renderActivity(s.activity);
-    renderVouchers(s.vouchers);
-    updateRedeemButtons();
 
     buildBoard();
     buildKeyboard();
@@ -1355,50 +1242,11 @@ ${BASE_CSS}
     }).join('');
   }
 
-  function renderVouchers(vouchers) {
-    const el = document.getElementById('voucher-list');
-    if (!vouchers || !vouchers.length) {
-      el.innerHTML = '<div class="empty-note">No vouchers yet — redeem points to claim one.</div>';
-      return;
-    }
-    el.innerHTML = vouchers.map(function(v) {
-      const exp = new Date(v.expires_at).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
-      return '<div class="voucher-item">' +
-        '<div><div class="voucher-val">£' + v.value + ' voucher</div><div class="voucher-code">' + escapeHtml(v.code) + ' · expires ' + exp + '</div></div>' +
-        '<div class="voucher-badge">ACTIVE</div>' +
-      '</div>';
-    }).join('');
-  }
-
-  function updateRedeemButtons() {
-    const bal = state ? state.balance : 0;
-    document.querySelectorAll('.redeem-btn').forEach(function(btn) {
-      const cost = parseInt(btn.dataset.cost);
-      if (bal < cost) { btn.disabled = true; btn.textContent = 'Need ' + (cost - bal) + ' more'; }
-      else { btn.disabled = false; btn.textContent = 'Redeem'; }
-    });
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function(c) {
       return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
     });
   }
-
-  // ─── Redeem ───────────────────────────────────────────────────────
-  document.querySelectorAll('.redeem-btn').forEach(function(btn) {
-    btn.addEventListener('click', async function() {
-      if (btn.disabled) return;
-      const value = parseInt(btn.dataset.reward);
-      try {
-        const data = await api('/redeem', 'POST', { value: value });
-        toast('£' + value + ' voucher claimed — ' + data.voucher.code, 3000);
-        await loadState();
-      } catch (err) {
-        toast(err.message || 'Could not redeem');
-      }
-    });
-  });
 
   // ─── Leaderboard ──────────────────────────────────────────────────
   async function loadLeaderboard() {
@@ -1504,8 +1352,8 @@ ${BASE_CSS}
       if (tab === 'leaderboard') loadLeaderboard();
     });
   });
-  document.getElementById('gotorewardsbtn').addEventListener('click', function() {
-    document.querySelector('[data-tab="rewards"]').click();
+  document.getElementById('gotoleaderboardbtn').addEventListener('click', function() {
+    document.querySelector('[data-tab="leaderboard"]').click();
   });
 
   // ─── Overlays ─────────────────────────────────────────────────────

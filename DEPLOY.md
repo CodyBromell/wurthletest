@@ -93,7 +93,7 @@ To avoid colliding with production data, create a second Supabase project just f
 2. **Rate limiting** — nothing stops a bot spamming `/api/wurthle/guess`. Add `express-rate-limit` capped at ~30 req/min per IP.
 3. **CORS** — currently open. Lock to the eshop domain + Vercel URL.
 4. **Supabase Row Level Security** — not required (we use JWT auth in the app), but worth enabling as defence in depth.
-5. **Voucher codes → SalesManago** — push a tag on redeem so eshop checkout honours it (Phase 2 in CLAUDE.md).
+5. **Rewards store** — removed for now (tab, redeem endpoint and voucher display). The `wurthle_vouchers` table is kept. If it comes back, voucher codes need pushing to SalesManago so eshop checkout honours them (Phase 2 in CLAUDE.md).
 
 ## Troubleshooting
 

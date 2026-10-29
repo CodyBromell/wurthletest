@@ -95,10 +95,6 @@ function scoreGuess(guess, answer) {
   return result;
 }
 
-function generateVoucherCode() {
-  return "WUR-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
 async function getOrCreatePuzzle(dateStr) {
   const existing = await query(
     `SELECT date, puzzle_no, answer FROM wurthle_puzzles WHERE date = ?`,
@@ -287,12 +283,6 @@ router.get("/state", requireAuth, async (req, res) => {
     const gameOver = !!todaysResult;
     const won = todaysResult ? !!todaysResult.won : false;
 
-    const vouchers = await query(
-      `SELECT id, code, value, expires_at FROM wurthle_vouchers
-       WHERE customer_number = ? ORDER BY id DESC`,
-      [customerNumber]
-    );
-
     const activity = await query(
       `SELECT label, amount, created_at FROM wurthle_activity
        WHERE customer_number = ? ORDER BY id DESC LIMIT 10`,
@@ -327,7 +317,6 @@ router.get("/state", requireAuth, async (req, res) => {
       },
       balance: user.balance,
       pointsForToday: pointsForStreak(user.streak + (won ? 0 : 1)),
-      vouchers,
       activity,
       leaderboardOptIn: !!user.leaderboard_opt_in,
       mustChangePassword: !!user.must_change_password,
@@ -556,49 +545,6 @@ router.post("/guess", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("wurthle/guess error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// ─── POST /api/wurthle/redeem ───────────────────────────────────────
-const REWARDS = {
-  10: { cost: 100, minOrder: 50 },
-  25: { cost: 240, minOrder: 100 },
-  50: { cost: 450, minOrder: 200 },
-};
-
-router.post("/redeem", requireAuth, async (req, res) => {
-  try {
-    const { customerNumber } = req.user;
-    const value = parseInt(req.body.value);
-
-    if (!REWARDS[value]) return res.status(400).json({ error: "Unknown reward" });
-    const { cost } = REWARDS[value];
-
-    const [user] = await query(`SELECT balance FROM wurthle_users WHERE customer_number = ?`, [customerNumber]);
-    if (!user || user.balance < cost) return res.status(400).json({ error: "Not enough points" });
-
-    const code = generateVoucherCode();
-    const expiresAt = new Date(Date.now() + 90 * 86400000).toISOString();
-
-    await query(
-      `INSERT INTO wurthle_vouchers (customer_number, code, value, cost, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [customerNumber,code, value, cost, expiresAt]
-    );
-    await query(
-      `UPDATE wurthle_users SET balance = balance - ? WHERE customer_number = ?`,
-      [cost, customerNumber]
-    );
-    await addActivity(customerNumber,`Redeemed £${value} voucher`, -cost);
-
-    res.json({
-      success: true,
-      voucher: { code, value, expiresAt },
-      balance: user.balance - cost,
-    });
-  } catch (err) {
-    console.error("wurthle/redeem error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
