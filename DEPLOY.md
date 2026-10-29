@@ -38,6 +38,7 @@ Keep this ready.
    | `DATABASE_URL` | Supabase pooler URI from step 1 (with password filled in) |
    | `JWT_SECRET` | any long random string — https://randomkeygen.com → "CodeIgniter Encryption Keys" |
    | `NODE_ENV` | `production` |
+   | `ADMIN_PASSWORD` | long random string (12+ characters) — unlocks `/wurthle/admin` |
 
 6. Click **Deploy**. ~90 seconds.
 
@@ -47,7 +48,17 @@ You'll get a URL like `wurthletest.vercel.app`. The game is at `/wurthle`.
 
 Send `https://<your-vercel-url>/wurthle`. Customers click **Create account**, enter their Würth customer number (starts with 308), name and a password, then sign in with customer number + password from then on.
 
-**Resetting a customer's password:** there's no "forgot password" flow yet. In Supabase → Table Editor → `wurthle_users`, find their `customer_number` and clear the `password_hash` cell. They can then use **Create account** again with the same number and keep their points and streak. The November leaderboard populates as users play — campaign window is Nov 1–30 2026.
+Campaign terms are at `/wurthle/terms` and linked from the sign-in screen, the leaderboard and the opt-in switch. Opting in counts as accepting them (clause 12), and the time of each opt-in is recorded.
+
+## 4. Admin page
+
+`https://<your-vercel-url>/wurthle/admin`, signed in with `ADMIN_PASSWORD`. Sessions last 8 hours.
+
+- **Sign-ups** — totals (all time, today, last 7 days, played today, leaderboard opt-ins) and a searchable player list: customer number, name, sign-up and last sign-in times, games played/won, November points, balance, opt-in time and account status.
+- **Download CSV** — every player, for the prize draw and spend checks.
+- **Reset password** — gives the customer a one-time temporary password (e.g. `k7mq-x2rt-9vha`) and unlocks the account. Pass it on via their sales rep; when they sign in with it they must choose their own password. Staff never know a customer's real password.
+
+To change the admin password, update `ADMIN_PASSWORD` in Vercel and redeploy.
 
 ## Updating after a code change
 
@@ -89,5 +100,6 @@ To avoid colliding with production data, create a second Supabase project just f
 - **"Database unavailable" or ECONNREFUSED on first load** — `DATABASE_URL` wrong. Verify in Vercel → Project → Settings → Environment Variables. Must be the **Transaction** pooler URI (port 6543), not the Direct connection.
 - **"password authentication failed"** — you forgot to substitute `[YOUR-PASSWORD]` in the connection string with your actual database password.
 - **"prepared statement already exists"** — the `prepare: false` option in `db.js` prevents this; it's required for Supabase's transaction-mode pooler. If you see it anyway, double-check `db.js` wasn't reverted.
+- **Admin page says "Admin access isn't set up yet"** — `ADMIN_PASSWORD` is missing or under 12 characters. Add it in Vercel → Settings → Environment Variables, then redeploy (env var changes only apply to new deployments).
 - **November leaderboard still empty on 1 Nov** — override `CAMPAIGN_START` / `CAMPAIGN_END` env vars in Vercel if you want a different window. Defaults are 2026-11-01 to 2026-11-30.
 - **Vercel function timeout (10 s on Hobby plan)** — rare for this app's query sizes. If it happens, Supabase pooler is overloaded; refresh works. Pro plan has 60 s.

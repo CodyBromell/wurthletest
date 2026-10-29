@@ -1,11 +1,8 @@
 const express = require("express");
-const crypto = require("crypto");
-const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 const { query } = require("./db");
 const { SECRET } = require("./tokens");
-
-const scrypt = promisify(crypto.scrypt);
+const { hashPassword, verifyPassword } = require("./passwords");
 
 const router = express.Router();
 
@@ -135,27 +132,17 @@ function normaliseCustomerNumber(raw) {
   return String(raw || "").replace(/\s+/g, "");
 }
 
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16);
-  const hash = await scrypt(password, salt, 64);
-  return `scrypt$${salt.toString("base64")}$${hash.toString("base64")}`;
-}
-
-async function verifyPassword(password, stored) {
-  if (!stored || !stored.startsWith("scrypt$")) return false;
-  const [, saltB64, hashB64] = stored.split("$");
-  const expected = Buffer.from(hashB64, "base64");
-  const actual = await scrypt(password, Buffer.from(saltB64, "base64"), expected.length);
-  return crypto.timingSafeEqual(actual, expected);
-}
-
 function issueSession(user) {
   const token = jwt.sign(
     { sub: user.customer_number, name: user.name, wurthle: SESSION_VERSION },
     SECRET,
     { expiresIn: "30d" }
   );
-  return { token, user: { customerNumber: user.customer_number, name: user.name } };
+  return {
+    token,
+    user: { customerNumber: user.customer_number, name: user.name },
+    mustChangePassword: !!user.must_change_password,
+  };
 }
 
 // ─── Auth middleware ────────────────────────────────────────────────
@@ -203,13 +190,14 @@ router.post("/register", async (req, res) => {
     const passwordHash = await hashPassword(password);
     if (existing) {
       await query(
-        `UPDATE wurthle_users SET name = ?, password_hash = ?, failed_logins = 0, locked_until = NULL
+        `UPDATE wurthle_users SET name = ?, password_hash = ?, failed_logins = 0, locked_until = NULL,
+           must_change_password = 0, last_login_at = NOW()
          WHERE customer_number = ?`,
         [name, passwordHash, customerNumber]
       );
     } else {
       await query(
-        `INSERT INTO wurthle_users (customer_number, name, password_hash) VALUES (?, ?, ?)`,
+        `INSERT INTO wurthle_users (customer_number, name, password_hash, last_login_at) VALUES (?, ?, ?, NOW())`,
         [customerNumber, name, passwordHash]
       );
     }
@@ -258,12 +246,11 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: BAD_LOGIN });
     }
 
-    if (user.failed_logins || user.locked_until) {
-      await query(
-        `UPDATE wurthle_users SET failed_logins = 0, locked_until = NULL WHERE customer_number = ?`,
-        [customerNumber]
-      );
-    }
+    await query(
+      `UPDATE wurthle_users SET failed_logins = 0, locked_until = NULL, last_login_at = NOW()
+       WHERE customer_number = ?`,
+      [customerNumber]
+    );
 
     res.json(issueSession(user));
   } catch (err) {
@@ -343,6 +330,7 @@ router.get("/state", requireAuth, async (req, res) => {
       vouchers,
       activity,
       leaderboardOptIn: !!user.leaderboard_opt_in,
+      mustChangePassword: !!user.must_change_password,
       campaign: {
         start: CAMPAIGN_START,
         end: CAMPAIGN_END,
@@ -360,13 +348,49 @@ router.post("/opt-in", requireAuth, async (req, res) => {
   try {
     const { customerNumber } = req.user;
     const optIn = req.body.optIn ? 1 : 0;
+    // Opting in is acceptance of the campaign T&Cs, so keep when it happened.
     await query(
-      `UPDATE wurthle_users SET leaderboard_opt_in = ? WHERE customer_number = ?`,
-      [optIn, customerNumber]
+      `UPDATE wurthle_users SET leaderboard_opt_in = ?,
+         leaderboard_opt_in_at = CASE WHEN ? = 1 THEN NOW() ELSE leaderboard_opt_in_at END
+       WHERE customer_number = ?`,
+      [optIn, optIn, customerNumber]
     );
     res.json({ success: true, leaderboardOptIn: !!optIn });
   } catch (err) {
     console.error("wurthle/opt-in error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/wurthle/change-password ──────────────────────────────
+// After an admin reset (must_change_password = 1) the session itself
+// proves the customer just signed in with the temporary password.
+router.post("/change-password", requireAuth, async (req, res) => {
+  try {
+    const { customerNumber } = req.user;
+    const currentPassword = String(req.body.currentPassword || "");
+    const newPassword = String(req.body.newPassword || "");
+
+    const user = await getUser(customerNumber);
+    if (!user) return res.status(401).json({ error: "Please sign in again" });
+
+    if (!user.must_change_password && !(await verifyPassword(currentPassword, user.password_hash))) {
+      return res.status(400).json({ error: "Your current password is incorrect." });
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > 200) {
+      return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+    }
+    if (await verifyPassword(newPassword, user.password_hash)) {
+      return res.status(400).json({ error: "Choose a password you haven't used here before." });
+    }
+
+    await query(
+      `UPDATE wurthle_users SET password_hash = ?, must_change_password = 0 WHERE customer_number = ?`,
+      [await hashPassword(newPassword), customerNumber]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("wurthle/change-password error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

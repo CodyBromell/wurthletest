@@ -207,6 +207,9 @@ async function initDb() {
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS failed_logins INTEGER DEFAULT 0`);
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS must_change_password INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS leaderboard_opt_in_at TIMESTAMPTZ`);
 
     await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(customer_number, puzzle_date)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(customer_number)`);

@@ -2,6 +2,7 @@
 // All state lives on the server; this client just renders.
 
 const { WURTH_LOGO_SRC } = require("./wurth-logo");
+const { FONT_PRELOADS, BASE_CSS } = require("./wurthle-theme");
 
 function getWurthleHTML() {
   return `<!DOCTYPE html>
@@ -10,51 +11,9 @@ function getWurthleHTML() {
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Würthle — Daily word game</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+${FONT_PRELOADS}
 <style>
-  :root {
-    --wurth-red:    #CC0000;
-    --wurth-red-dk: #A30000;
-    --ink:          #121212;
-    --ink-2:        #2C2C2A;
-    --muted:        #6B6B67;
-    --muted-2:      #9A9994;
-    --line:         #ECEAE4;
-    --line-2:       #E0DDD6;
-    --surface:      #FFFFFF;
-    --bg:           #F7F6F2;
-    --bg-chip:      #F0EEE8;
-    --tile-correct: #B9C900;
-    --tile-correct-ink: #121212;
-    --tile-present: #009EE0;
-    --tile-present-ink: #FFFFFF;
-    --tile-absent:  #CC0000;
-    --tile-absent-ink: #FFFFFF;
-    --success:      #1D7A4B;
-    --shadow-sm:    0 1px 2px rgba(16, 16, 14, 0.04), 0 1px 3px rgba(16, 16, 14, 0.03);
-    --shadow-md:    0 4px 14px rgba(16, 16, 14, 0.06), 0 1px 3px rgba(16, 16, 14, 0.04);
-    --shadow-lg:    0 10px 40px rgba(16, 16, 14, 0.14);
-    --radius-sm:    6px;
-    --radius:       10px;
-    --radius-lg:    14px;
-    --ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--ink);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    font-feature-settings: 'ss01', 'cv11';
-    letter-spacing: -0.005em;
-  }
-
-  button { font-family: inherit; }
+${BASE_CSS}
 
   .wurthle-wrap {
     max-width: 560px;
@@ -167,10 +126,6 @@ function getWurthleHTML() {
     border-color: var(--ink);
   }
   .brand-block { text-align: center; flex: 1; }
-  .brand-mark {
-    display: block; margin: 0 auto 12px;
-    width: 120px; height: auto;
-  }
   .brand-title {
     font-size: 28px; font-weight: 700;
     line-height: 1; letter-spacing: -0.02em;
@@ -701,6 +656,48 @@ function getWurthleHTML() {
     font-size: 11px; color: var(--muted-2);
     letter-spacing: 0.02em;
   }
+
+  /* ─── Würth type: Extra Bold Condensed for headings, numbers, tiles
+     and buttons; everything else stays in Wuerth Book (set on body). ── */
+  .brand-title, .login-title, .overlay-title, .lb-hero-title, .lb-empty-title,
+  .end-status, .card-label, .lb-hero-eyebrow, .opt-title, .reward-name,
+  .big-balance, .stat-cell-val, .stat-chip-val, .lb-stat-val, .balance-val,
+  .lb-rank, .lb-points, .voucher-val, .reward-icon, .reward-cost, .avatar,
+  .wurthle-tile, .example-tile, .wurthle-key, .dist-bar,
+  .btn, .redeem-btn, .login-form button, .lb-optin-cta, .lb-me-chip {
+    font-family: var(--font-head);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+  .brand-title   { font-size: 36px; }
+  .login-title   { font-size: 36px; }
+  .overlay-title { font-size: 21px; }
+  .lb-hero-title { font-size: 27px; line-height: 1.1; }
+  .end-status    { font-size: 21px; }
+  .card-label    { font-size: 12.5px; letter-spacing: 0.06em; }
+  .opt-title, .reward-name { font-size: 16px; }
+  .big-balance   { font-size: 42px; }
+  .stat-cell-val { font-size: 26px; }
+  .wurthle-tile  { font-size: 34px; }
+  .wurthle-key   { font-size: 17px; letter-spacing: 0.03em; }
+  .wurthle-key.wide { font-size: 13px; }
+  .btn, .redeem-btn, .login-form button, .lb-optin-cta { font-size: 15px; letter-spacing: 0.03em; }
+
+  /* Wuerth Book runs small next to the old DM Sans sizes */
+  .login-sub { font-size: 15px; }
+  .login-form input { font-size: 15px; }
+  .auth-tab, .tab-btn { font-size: 14px; }
+  .field-hint, .account-sub, .brand-sub, .end-points, .reward-sub, .opt-sub, .lb-hero-sub { font-size: 13px; }
+  .account-name, .activity-row, .lb-row, .ex-caption { font-size: 14.5px; }
+
+  .terms-link { margin-top: 22px; font-size: 13.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .terms-link:hover { color: var(--ink); }
+  .lb-hero-sub a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .opt-sub a, .lb-optin-text a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+  .pw-intro { font-size: 14.5px; color: var(--ink-2); margin-bottom: 14px; line-height: 1.5; }
+  .pw-intro:empty { display: none; }
+  .pw-form { max-width: none; }
+  #change-pw-btn { flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -735,6 +732,7 @@ function getWurthleHTML() {
       <button type="submit" id="register-btn">Create account &amp; play</button>
       <div class="login-error" id="register-error"></div>
     </form>
+    <a class="terms-link" href="/wurthle/terms">Play · Spend · Win — Terms &amp; Conditions</a>
   </div>
 
   <!-- ─── Main app shell ─── -->
@@ -769,7 +767,6 @@ function getWurthleHTML() {
       <div class="game-header">
         <button id="helpbtn" class="icon-btn" title="How to play" aria-label="How to play">?</button>
         <div class="brand-block">
-          <img class="brand-mark" src="${WURTH_LOGO_SRC}" alt="Würth" />
           <div class="brand-title">W&uuml;rthle</div>
           <div class="brand-sub" id="datelabel">Daily word</div>
         </div>
@@ -810,7 +807,7 @@ function getWurthleHTML() {
       <div class="lb-hero">
         <div class="lb-hero-eyebrow">Play · Spend · Win · November</div>
         <div class="lb-hero-title">Climb the leaderboard, win a 50″ Xiaomi TV.</div>
-        <div class="lb-hero-sub">Top 50 point-earners who also spend £500+ on the eShop in November go into the prize draw.</div>
+        <div class="lb-hero-sub">Top 50 point-earners who also spend £500+ on the eShop in November go into the prize draw. <a href="/wurthle/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a></div>
         <div class="lb-hero-stats">
           <div>
             <div class="lb-stat-val" id="lb-my-points">0</div>
@@ -831,7 +828,7 @@ function getWurthleHTML() {
         <div class="lb-optin-icon">!</div>
         <div class="lb-optin-text">
           <strong>You're not on the leaderboard yet.</strong>
-          <div class="small">Opt in to show your name — you can turn this off any time.</div>
+          <div class="small">Opt in to show your name and enter the Play · Spend · Win draw. By opting in you agree to the <a href="/wurthle/terms" target="_blank" rel="noopener">terms</a>.</div>
         </div>
         <button class="lb-optin-cta" id="lb-optin-cta">Opt in</button>
       </div>
@@ -864,9 +861,19 @@ function getWurthleHTML() {
         <div class="opt-row">
           <div class="opt-text">
             <div class="opt-title">Show my name on the November leaderboard</div>
-            <div class="opt-sub">You can change this any time. Required for the Play · Spend · Win draw.</div>
+            <div class="opt-sub">Required for the Play · Spend · Win draw. By turning this on you agree to the <a href="/wurthle/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a>. You can turn it off any time.</div>
           </div>
           <div class="toggle" id="optin-toggle" role="switch" aria-checked="false" tabindex="0"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="opt-row">
+          <div class="opt-text">
+            <div class="opt-title">Password</div>
+            <div class="opt-sub">Change the password you use to sign in.</div>
+          </div>
+          <button class="btn btn-ghost" id="change-pw-btn">Change</button>
         </div>
       </div>
 
@@ -933,7 +940,7 @@ function getWurthleHTML() {
   <div class="overlay-body">
     <div style="font-size: 13.5px; margin-bottom: 14px; line-height: 1.5;">Guess the W&uuml;rthle in <strong>5 tries</strong>. Each guess must be a valid 5-letter word.</div>
 
-    <div style="font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;">Examples</div>
+    <div class="card-label">Examples</div>
 
     <div class="ex-row">
       <div class="ex-tiles">
@@ -969,7 +976,7 @@ function getWurthleHTML() {
     </div>
 
     <div class="help-section">
-      <div style="font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;">Earn loyalty points</div>
+      <div class="card-label">Earn loyalty points</div>
       <table class="help-table">
         <tr><td>Daily solve</td><td>3 pts</td></tr>
         <tr><td>7-day streak</td><td>4 pts</td></tr>
@@ -993,8 +1000,26 @@ function getWurthleHTML() {
       <div style="text-align: center;"><div class="stat-cell-val" id="s-streak">0</div><div class="stat-cell-label">Current</div></div>
       <div style="text-align: center;"><div class="stat-cell-val" id="s-max">0</div><div class="stat-cell-label">Max</div></div>
     </div>
-    <div style="font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;">Guess distribution</div>
+    <div class="card-label">Guess distribution</div>
     <div id="distribution"></div>
+  </div>
+</div>
+
+<!-- ─── Password modal ─── -->
+<div id="pwmodal" class="overlay-panel" role="dialog" aria-modal="true">
+  <div class="overlay-header">
+    <div class="overlay-title" id="pw-title">Change password</div>
+    <button class="overlay-close" id="closepwbtn" aria-label="Close">×</button>
+  </div>
+  <div class="overlay-body">
+    <div class="pw-intro" id="pw-intro"></div>
+    <form class="login-form pw-form" id="pw-form" novalidate>
+      <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" />
+      <input type="password" id="pw-new" placeholder="New password (8+ characters)" autocomplete="new-password" />
+      <input type="password" id="pw-new2" placeholder="Confirm new password" autocomplete="new-password" />
+      <button type="submit" id="pw-submit">Save new password</button>
+      <div class="login-error" id="pw-error"></div>
+    </form>
   </div>
 </div>
 
@@ -1276,6 +1301,8 @@ function getWurthleHTML() {
     toggle.classList.toggle('on', !!s.leaderboardOptIn);
     toggle.setAttribute('aria-checked', s.leaderboardOptIn ? 'true' : 'false');
 
+    if (s.mustChangePassword && !pwModal.classList.contains('show')) openPasswordModal(true);
+
     renderActivity(s.activity);
     renderVouchers(s.vouchers);
     updateRedeemButtons();
@@ -1485,8 +1512,55 @@ function getWurthleHTML() {
   const dimmer = document.getElementById('dimmer');
   const helpModal = document.getElementById('helpmodal');
   const statsModal = document.getElementById('statsmodal');
-  function openOverlay(panel) { helpModal.classList.remove('show'); statsModal.classList.remove('show'); panel.classList.add('show'); dimmer.classList.add('show'); }
-  function closeOverlay() { helpModal.classList.remove('show'); statsModal.classList.remove('show'); dimmer.classList.remove('show'); }
+  const pwModal = document.getElementById('pwmodal');
+  const panels = [helpModal, statsModal, pwModal];
+  let pwForced = false;
+  function openOverlay(panel) { panels.forEach(function(p) { p.classList.remove('show'); }); panel.classList.add('show'); dimmer.classList.add('show'); }
+  function closeOverlay() {
+    if (pwForced && pwModal.classList.contains('show')) return;
+    panels.forEach(function(p) { p.classList.remove('show'); });
+    dimmer.classList.remove('show');
+  }
+
+  function openPasswordModal(forced) {
+    pwForced = !!forced;
+    document.getElementById('pw-title').textContent = forced ? 'Choose a new password' : 'Change password';
+    document.getElementById('pw-intro').textContent = forced ? 'You signed in with a temporary password. Choose your own to keep playing.' : '';
+    document.getElementById('pw-current').style.display = forced ? 'none' : '';
+    document.getElementById('closepwbtn').style.display = forced ? 'none' : '';
+    ['pw-current', 'pw-new', 'pw-new2'].forEach(function(id) { document.getElementById(id).value = ''; });
+    document.getElementById('pw-error').textContent = '';
+    openOverlay(pwModal);
+    document.getElementById(forced ? 'pw-new' : 'pw-current').focus();
+  }
+  document.getElementById('change-pw-btn').addEventListener('click', function() { openPasswordModal(false); });
+  document.getElementById('closepwbtn').addEventListener('click', closeOverlay);
+
+  document.getElementById('pw-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const current = document.getElementById('pw-current').value;
+    const next = document.getElementById('pw-new').value;
+    const next2 = document.getElementById('pw-new2').value;
+    const errEl = document.getElementById('pw-error');
+    const btn = document.getElementById('pw-submit');
+    errEl.textContent = '';
+    if (!pwForced && !current) { errEl.textContent = 'Enter your current password.'; return; }
+    if (next.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+    if (next !== next2) { errEl.textContent = 'Passwords don\\'t match.'; return; }
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await api('/change-password', 'POST', { currentPassword: current, newPassword: next });
+      pwForced = false;
+      if (state) state.mustChangePassword = false;
+      closeOverlay();
+      ['pw-current', 'pw-new', 'pw-new2'].forEach(function(id) { document.getElementById(id).value = ''; });
+      toast('Password updated', 1800);
+    } catch (err) {
+      errEl.textContent = err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save new password';
+    }
+  });
   document.getElementById('helpbtn').addEventListener('click', function() { openOverlay(helpModal); });
   document.getElementById('closehelpbtn').addEventListener('click', closeOverlay);
   document.getElementById('statsbtn').addEventListener('click', function() { renderStats(); openOverlay(statsModal); });
@@ -1531,6 +1605,8 @@ function getWurthleHTML() {
   document.addEventListener('keydown', function(e) {
     if (!document.getElementById('tab-game').classList.contains('active')) return;
     if (!document.getElementById('app-shell').classList.contains('show')) return;
+    if (e.target && e.target.closest && e.target.closest('input, textarea')) return;
+    if (pwModal.classList.contains('show')) return;
     if (e.key === 'Escape') closeOverlay();
     else if (e.key === 'Enter') handleKey('ENTER');
     else if (e.key === 'Backspace') handleKey('BACK');
