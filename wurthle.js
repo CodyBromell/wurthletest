@@ -3,46 +3,10 @@ const jwt = require("jsonwebtoken");
 const { query } = require("./db");
 const { SECRET } = require("./tokens");
 const { hashPassword, verifyPassword } = require("./passwords");
+const { VALID_GUESSES, puzzleNoFor, answerForDate, scoreGuess } = require("./wurthle-words");
 
 const router = express.Router();
 
-// ─── Word lists (server-side only — never sent to client) ───────────
-const ANSWERS = [
-  "HOUSE","PLANT","BRAIN","SHARE","LIGHT","WATER","SMILE","STONE","PRIDE","GRADE",
-  "DRILL","BRACE","METAL","RIVET","PAINT","CLAMP","SCREW","TORCH","VALVE","HINGE",
-  "LATCH","STEEL","BRASS","MOTOR","POWER","WHEEL","BUILD","FORGE","GLOVE","CRANE",
-  "GRAIN","THINK","THANK","EVERY","OTHER","THERE","WHERE","WHICH","WRITE","PAPER",
-  "POINT","PLACE","MONEY","STORY","SHINE","SHORE","STORM","STORE","SCORE","SHADE",
-  "SHAPE","SHAKE","BRIDE","TRICK","BRICK","CLICK","CLOCK","BLOCK","STICK","THICK",
-  "QUICK","PHASE","PRIZE","PRIME","CRIME","DRAIN","PLAIN","STAIN","FAITH","SAINT"
-];
-
-const EXTRA_GUESSES = [
-  "SLATE","TRACE","CRATE","ADIEU","AUDIO","RAISE","AROSE","LEAST","STARE","TEARS",
-  "NOTES","NIGHT","MIGHT","RIGHT","SIGHT","FIGHT","TIGHT","EIGHT","APPLE","HAPPY",
-  "HELLO","WORLD","MUSIC","PIANO","TABLE","CHAIR","PHONE","BOARD","PRESS","CABLE",
-  "TOOLS","PARTS","STOCK","TRADE","MIXER","PUMPS","TRAIN","TRAIL","BRING","THEIR",
-  "WORDS","WROTE","PUNCH","TOUCH","WATCH","CATCH","MATCH","BATCH","PATCH","HATCH",
-  "HOIST","SPARK","MOUNT","BOLTS","WELDS","PIPES","PIVOT","SHEET","ANGLE","EARTH",
-  "EAGLE","LEMON","LEVEL","LABEL","MAGIC","MODEL","NORTH","SOUTH","GREEN","HEART",
-  "HEAVY","HOTEL","HUMAN","LARGE","LEARN","MAYBE","MONTH","MOUTH","MOVIE","NEVER",
-  "OCEAN","ORDER","PARTY","PEACE","PHOTO","PIECE","PILOT","PITCH","PRICE","PROUD",
-  "QUEEN","QUEST","RADIO","RANGE","RAPID","REACH","READY","REPLY","RIVER","ROUGH",
-  "ROUND","ROUTE","ROYAL","SCENE","SENSE","SHARP","SHEEP","SHIFT","SHIRT","SHORT",
-  "SHOWN","SILLY","SINCE","SKILL","SLEEP","SLIDE","SMART","SOLID","SORRY","SOUND",
-  "SPACE","SPEAK","SPEED","SPEND","SPLIT","SPOKE","SPORT","STAFF","STAGE","STAND",
-  "START","STATE","STEAM","STIFF","STILL","STOOD","STUCK","STUDY","STUFF","SUGAR",
-  "SUITE","SUPER","SWEET","TASTE","TEACH","TEETH","THEME","THOSE","THREE","THREW",
-  "THROW","THUMB","TIRED","TITLE","TODAY","TOPIC","TOTAL","TOUGH","TOWER","TRACK",
-  "TREAT","TREND","TRIAL","TRUCK","TRULY","TRUNK","TRUST","TRUTH","UNDER","UNION",
-  "UNTIL","UPPER","UPSET","URBAN","USAGE","USUAL","VALID","VALUE","VIDEO","VISIT",
-  "VITAL","VOICE","WASTE","WHILE","WHITE","WHOLE","WHOSE","WOMAN","WOMEN","WORRY",
-  "WORSE","WORST","WORTH","WOULD","WRONG","YIELD","YOUNG","YOUTH"
-];
-
-const VALID_GUESSES = new Set([...ANSWERS, ...EXTRA_GUESSES]);
-
-const EPOCH = new Date("2026-01-01T00:00:00Z");
 const MAX_ATTEMPTS = 5;
 
 // ─── PLAY. SPEND. WIN. campaign window ───────────────────────────────
@@ -64,9 +28,17 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function puzzleNoFor(dateStr) {
+function dayBefore(dateStr) {
   const d = new Date(dateStr + "T00:00:00Z");
-  return Math.floor((d - EPOCH) / 86400000) + 1;
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// The stored streak only changes when a game finishes, so a player who
+// skipped days still has their old number until they next play.
+function currentStreak(user, dateStr) {
+  const last = user.last_played_date;
+  return last === dateStr || last === dayBefore(dateStr) ? user.streak : 0;
 }
 
 function pointsForStreak(streak) {
@@ -74,25 +46,6 @@ function pointsForStreak(streak) {
   if (streak >= 14) return 5;
   if (streak >= 7) return 4;
   return 3;
-}
-
-function scoreGuess(guess, answer) {
-  const g = guess.split("");
-  const a = answer.split("");
-  const result = ["absent", "absent", "absent", "absent", "absent"];
-  const consumed = [false, false, false, false, false];
-  for (let i = 0; i < 5; i++) {
-    if (g[i] === a[i]) { result[i] = "correct"; consumed[i] = true; }
-  }
-  for (let i = 0; i < 5; i++) {
-    if (result[i] === "correct") continue;
-    for (let j = 0; j < 5; j++) {
-      if (!consumed[j] && g[i] === a[j]) {
-        result[i] = "present"; consumed[j] = true; break;
-      }
-    }
-  }
-  return result;
 }
 
 async function getOrCreatePuzzle(dateStr) {
@@ -103,7 +56,7 @@ async function getOrCreatePuzzle(dateStr) {
   if (existing.length) return existing[0];
 
   const puzzleNo = puzzleNoFor(dateStr);
-  const answer = ANSWERS[(puzzleNo - 1) % ANSWERS.length];
+  const answer = answerForDate(dateStr);
   await query(
     `INSERT INTO wurthle_puzzles (date, puzzle_no, answer) VALUES (?, ?, ?)
      ON CONFLICT (date) DO NOTHING`,
@@ -124,8 +77,17 @@ async function addActivity(customerNumber, label, amount) {
   );
 }
 
+// Accepts "308 123 4567", "308-123-4567" or a JSON number.
 function normaliseCustomerNumber(raw) {
-  return String(raw || "").replace(/\s+/g, "");
+  if (typeof raw === "number") raw = String(raw);
+  if (typeof raw !== "string") return "";
+  return raw.replace(/[\s.\-]/g, "");
+}
+
+// Request fields must be real strings — String() would turn an object
+// into "[object Object]" or an array into "a,b".
+function textField(v) {
+  return typeof v === "string" ? v : null;
 }
 
 function issueSession(user) {
@@ -165,8 +127,8 @@ function requireAuth(req, res, next) {
 router.post("/register", async (req, res) => {
   try {
     const customerNumber = normaliseCustomerNumber(req.body.customerNumber);
-    const name = String(req.body.name || "").trim();
-    const password = String(req.body.password || "");
+    const name = (textField(req.body.name) || "").trim().replace(/\s+/g, " ");
+    const password = textField(req.body.password);
 
     if (!CUSTOMER_NUMBER_RE.test(customerNumber)) {
       return res.status(400).json({ error: "Enter your Würth customer number — it starts with 308." });
@@ -174,7 +136,7 @@ router.post("/register", async (req, res) => {
     if (name.length < 2 || name.length > 60) {
       return res.status(400).json({ error: "Enter your name (2–60 characters)." });
     }
-    if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
+    if (password === null || password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
       return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
     }
 
@@ -212,7 +174,7 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const customerNumber = normaliseCustomerNumber(req.body.customerNumber);
-    const password = String(req.body.password || "");
+    const password = textField(req.body.password);
     if (!customerNumber || !password) {
       return res.status(400).json({ error: "Enter your customer number and password." });
     }
@@ -282,6 +244,7 @@ router.get("/state", requireAuth, async (req, res) => {
 
     const gameOver = !!todaysResult;
     const won = todaysResult ? !!todaysResult.won : false;
+    const streak = currentStreak(user, dateStr);
 
     const activity = await query(
       `SELECT label, amount, created_at FROM wurthle_activity
@@ -311,12 +274,12 @@ router.get("/state", requireAuth, async (req, res) => {
       stats: {
         played: user.played,
         wins: user.wins,
-        streak: user.streak,
+        streak,
         maxStreak: user.max_streak,
         distribution: JSON.parse(user.distribution),
       },
       balance: user.balance,
-      pointsForToday: pointsForStreak(user.streak + (won ? 0 : 1)),
+      pointsForToday: pointsForStreak(streak + (won ? 0 : 1)),
       activity,
       leaderboardOptIn: !!user.leaderboard_opt_in,
       mustChangePassword: !!user.must_change_password,
@@ -357,8 +320,8 @@ router.post("/opt-in", requireAuth, async (req, res) => {
 router.post("/change-password", requireAuth, async (req, res) => {
   try {
     const { customerNumber } = req.user;
-    const currentPassword = String(req.body.currentPassword || "");
-    const newPassword = String(req.body.newPassword || "");
+    const currentPassword = textField(req.body.currentPassword) || "";
+    const newPassword = textField(req.body.newPassword) || "";
 
     const user = await getUser(customerNumber);
     if (!user) return res.status(401).json({ error: "Please sign in again" });
@@ -389,8 +352,10 @@ router.post("/change-password", requireAuth, async (req, res) => {
 function anonymiseName(name) {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "Würthle player";
-  if (parts.length >= 2) return parts[0] + " " + parts[1][0].toUpperCase() + ".";
-  return parts[0].slice(0, 24);
+  // Array.from splits by character, so an emoji or accented initial stays whole.
+  const first = Array.from(parts[0]).slice(0, 24).join("");
+  if (parts.length < 2) return first;
+  return first + " " + Array.from(parts[parts.length - 1])[0].toUpperCase() + ".";
 }
 
 router.get("/leaderboard", requireAuth, async (req, res) => {
@@ -441,7 +406,7 @@ router.post("/guess", requireAuth, async (req, res) => {
   try {
     const { customerNumber } = req.user;
     const dateStr = todayKey();
-    const guess = (req.body.guess || "").toUpperCase();
+    const guess = (textField(req.body.guess) || "").toUpperCase();
 
     if (!/^[A-Z]{5}$/.test(guess)) {
       return res.status(400).json({ error: "Guess must be 5 letters" });
@@ -475,11 +440,18 @@ router.post("/guess", requireAuth, async (req, res) => {
 
     const result = scoreGuess(guess, puzzle.answer);
     const attemptNo = attempts + 1;
-    await query(
+    // A unique index on (customer_number, puzzle_date, attempt_no) means
+    // guesses fired in parallel can't each claim the same attempt slot.
+    const claimed = await query(
       `INSERT INTO wurthle_attempts (customer_number, puzzle_date, attempt_no, guess, result)
-       VALUES (?, ?, ?, ?, ?)`,
-      [customerNumber,dateStr, attemptNo, guess, JSON.stringify(result)]
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (customer_number, puzzle_date, attempt_no) DO NOTHING
+       RETURNING id`,
+      [customerNumber, dateStr, attemptNo, guess, JSON.stringify(result)]
     );
+    if (!claimed.length) {
+      return res.status(409).json({ error: "One guess at a time — please try again." });
+    }
 
     const won = guess === puzzle.answer;
     const finished = won || attemptNo === MAX_ATTEMPTS;
@@ -498,22 +470,27 @@ router.post("/guess", requireAuth, async (req, res) => {
       if (won) {
         newWins += 1;
         distribution[attemptNo - 1] += 1;
-
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yKey = yesterday.toISOString().slice(0, 10);
-
-        if (user.last_played_date === yKey || user.last_played_date == null) {
-          newStreak += 1;
-        } else if (user.last_played_date !== dateStr) {
-          newStreak = 1;
-        }
+        newStreak = user.last_played_date === dayBefore(dateStr) || user.last_played_date == null
+          ? user.streak + 1
+          : 1;
         newMaxStreak = Math.max(newMaxStreak, newStreak);
         pointsEarned = pointsForStreak(newStreak);
         newBalance += pointsEarned;
-        await addActivity(customerNumber,`Würthle #${puzzle.puzzle_no} solved (${attemptNo}/${MAX_ATTEMPTS})`, pointsEarned);
       } else {
         newStreak = 0;
+      }
+
+      // The results row is the single record of a finished game; whoever
+      // inserts it first is the one that counts.
+      const recorded = await query(
+        `INSERT INTO wurthle_results (customer_number, puzzle_date, won, attempts, points_earned)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (customer_number, puzzle_date) DO NOTHING
+         RETURNING customer_number`,
+        [customerNumber, dateStr, won ? 1 : 0, attemptNo, pointsEarned]
+      );
+      if (!recorded.length) {
+        return res.status(409).json({ error: "Today's puzzle already finished" });
       }
 
       await query(
@@ -524,12 +501,9 @@ router.post("/guess", requireAuth, async (req, res) => {
         [newStreak, newMaxStreak, newPlayed, newWins,
          JSON.stringify(distribution), newBalance, dateStr, customerNumber]
       );
-
-      await query(
-        `INSERT INTO wurthle_results (customer_number, puzzle_date, won, attempts, points_earned)
-         VALUES (?, ?, ?, ?, ?)`,
-        [customerNumber,dateStr, won ? 1 : 0, attemptNo, pointsEarned]
-      );
+      if (won) {
+        await addActivity(customerNumber, `Würthle #${puzzle.puzzle_no} solved (${attemptNo}/${MAX_ATTEMPTS})`, pointsEarned);
+      }
     }
 
     res.json({

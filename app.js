@@ -35,7 +35,7 @@ app.use(async (req, res, next) => {
     next();
   } catch (err) {
     console.error("DB init failed:", err);
-    res.status(500).json({ error: "Database unavailable", detail: err.message });
+    res.status(500).json({ error: "Database unavailable" });
   }
 });
 
@@ -55,5 +55,14 @@ app.get("/wurthle/admin", (req, res) => {
 });
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 app.get("/", (req, res) => res.redirect("/wurthle"));
+
+// Malformed JSON, oversized bodies and anything unexpected get a short JSON
+// error instead of Express's HTML page (which includes a stack trace in dev).
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error("Unhandled error:", err);
+  const message = { 400: "Invalid request", 413: "Request too large" }[status] || "Internal server error";
+  res.status(status >= 400 && status < 600 ? status : 500).json({ error: message });
+});
 
 module.exports = app;

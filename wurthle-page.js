@@ -637,6 +637,17 @@ ${BASE_CSS}
   .pw-intro:empty { display: none; }
   .pw-form { max-width: none; }
   #change-pw-btn { flex-shrink: 0; }
+
+  /* Small phones (320–360px wide): keep the board and keyboard on screen */
+  @media (max-width: 360px) {
+    .wurthle-wrap { padding: 14px 8px 48px; }
+    .wurthle-tile { width: 52px; height: 52px; font-size: 30px; }
+    .kb-row { gap: 4px; }
+    .wurthle-key { min-width: 0; height: 50px; font-size: 15px; }
+    .wurthle-key.wide { font-size: 11px; }
+    .account-bar { padding: 12px; }
+    .tab-btn { font-size: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -929,7 +940,11 @@ ${BASE_CSS}
   const TOKEN_KEY = 'wurthle_session';
   try { localStorage.removeItem('wurthle_jwt'); } catch (e) {}
 
-  let token = localStorage.getItem(TOKEN_KEY);
+  // Storage can be blocked (private modes, strict settings); the game still works, you just sign in each visit.
+  function storeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function storeRemove(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  let token = storeGet(TOKEN_KEY);
   let state = null;
   let tiles = [], rows = [];
   let currentRow = 0, currentCol = 0;
@@ -984,7 +999,7 @@ ${BASE_CSS}
 
   async function startSession(data) {
     token = data.token;
-    localStorage.setItem(TOKEN_KEY, token);
+    storeSet(TOKEN_KEY, token);
     ['login-password', 'reg-password', 'reg-password2'].forEach(function(id) { document.getElementById(id).value = ''; });
     await boot();
   }
@@ -1031,7 +1046,7 @@ ${BASE_CSS}
   });
 
   document.getElementById('logout-btn').addEventListener('click', function() {
-    localStorage.removeItem(TOKEN_KEY);
+    storeRemove(TOKEN_KEY);
     token = null;
     showAuthForm('login');
     showLogin();
@@ -1123,6 +1138,16 @@ ${BASE_CSS}
       submitting = false;
       shake(rows[currentRow]);
       toast(err.message || 'Could not submit');
+      // Finished or out of attempts elsewhere (another tab or device): show the real board.
+      if (/finished|attempts left/i.test(err.message || '')) { try { await loadState(); } catch (e) {} }
+      return;
+    }
+
+    // This tab was behind (guesses made in another tab or device): redraw from the server.
+    if (data.attemptNo !== currentRow + 1) {
+      submitting = false;
+      try { await loadState(); } catch (e) {}
+      if (data.gameOver) showEndPanel(data.won, data.attemptNo, data.pointsEarned, data.balance);
       return;
     }
 
@@ -1475,7 +1500,7 @@ ${BASE_CSS}
       await loadState();
     } catch (err) {
       if (err.status === 401) {
-        localStorage.removeItem(TOKEN_KEY);
+        storeRemove(TOKEN_KEY);
         token = null;
         showLogin();
       } else {

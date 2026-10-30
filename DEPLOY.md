@@ -100,6 +100,7 @@ To avoid colliding with production data, create a second Supabase project just f
 - **"Database unavailable" or ECONNREFUSED on first load** — `DATABASE_URL` wrong. Verify in Vercel → Project → Settings → Environment Variables. Must be the **Transaction** pooler URI (port 6543), not the Direct connection.
 - **"password authentication failed"** — you forgot to substitute `[YOUR-PASSWORD]` in the connection string with your actual database password.
 - **"prepared statement already exists"** — the `prepare: false` option in `db.js` prevents this; it's required for Supabase's transaction-mode pooler. If you see it anyway, double-check `db.js` wasn't reverted.
+- **Daily answers** — the repo is public, so each day's word comes from a shuffle keyed by a server secret (`PUZZLE_SECRET`, or `JWT_SECRET` if that's not set). Don't change that secret mid-campaign: every day not yet played would get a new word. Days already played keep their stored answer.
 - **Admin page says "Admin access isn't set up yet"** — `ADMIN_PASSWORD` is missing or under 12 characters. Add it in Vercel → Settings → Environment Variables, then redeploy (env var changes only apply to new deployments).
 - **November leaderboard still empty on 1 Nov** — override `CAMPAIGN_START` / `CAMPAIGN_END` env vars in Vercel if you want a different window. Defaults are 2026-11-01 to 2026-11-30.
 - **Vercel function timeout (10 s on Hobby plan)** — rare for this app's query sizes. If it happens, Supabase pooler is overloaded; refresh works. Pro plan has 60 s.

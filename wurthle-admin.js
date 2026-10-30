@@ -49,7 +49,9 @@ router.post("/login", async (req, res) => {
 
 const PLAYER_COLUMNS = `
   u.customer_number, u.name, u.created_at, u.last_login_at, u.last_played_date,
-  u.played, u.wins, u.streak, u.balance, u.leaderboard_opt_in, u.leaderboard_opt_in_at,
+  u.played, u.wins, u.balance, u.leaderboard_opt_in, u.leaderboard_opt_in_at,
+  CASE WHEN u.last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
+       THEN u.streak ELSE 0 END AS streak,
   u.must_change_password, u.locked_until, (u.password_hash IS NOT NULL) AS has_password,
   COALESCE((SELECT SUM(r.points_earned) FROM wurthle_results r
             WHERE r.customer_number = u.customer_number

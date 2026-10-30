@@ -18,6 +18,7 @@ const sql = DATABASE_URL
       idle_timeout: 20,
       connect_timeout: 10,
       prepare: false, // required for Supabase transaction-mode pooler
+      onnotice: () => {}, // skip "already exists, skipping" notices from schema setup
     })
   : null;
 
@@ -212,6 +213,14 @@ async function initDb() {
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS leaderboard_opt_in_at TIMESTAMPTZ`);
 
     await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(customer_number, puzzle_date)`);
+    // One row per attempt slot, so parallel guesses can't exceed the limit.
+    // Drop any duplicate slots left from before this index existed.
+    await query(`
+      DELETE FROM wurthle_attempts a USING wurthle_attempts b
+      WHERE a.customer_number = b.customer_number AND a.puzzle_date = b.puzzle_date
+        AND a.attempt_no = b.attempt_no AND a.id > b.id
+    `);
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_w_attempt_slot ON wurthle_attempts(customer_number, puzzle_date, attempt_no)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_w_activity ON wurthle_activity(customer_number)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_w_vouchers ON wurthle_vouchers(customer_number)`);
 
