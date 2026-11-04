@@ -595,6 +595,7 @@ ${BASE_CSS}
     font-size: 11px; color: var(--muted-2);
     letter-spacing: 0.02em;
   }
+  .footer-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
   /* ─── Würth type: Extra Bold Condensed for headings, numbers, tiles
      and buttons; everything else stays in Wuerth Book (set on body). ── */
@@ -830,7 +831,7 @@ ${BASE_CSS}
       </div>
     </div>
 
-    <div class="footer-note">Würthle prototype · server-backed loyalty</div>
+    <div class="footer-note">Würth UK Ltd · <a href="/wurthle/terms">Terms &amp; Conditions</a></div>
   </div>
 </div>
 
@@ -1167,8 +1168,8 @@ ${BASE_CSS}
       if (data.gameOver) {
         gameOver = true;
         answer = data.answer;
-        await loadState();
-        showEndPanel(data.won, currentRow + 1, data.pointsEarned, data.balance);
+        await loadState(); // moves currentRow on, so use the server's attempt number
+        showEndPanel(data.won, data.attemptNo, data.pointsEarned, data.balance);
       } else {
         currentRow++;
         currentCol = 0;
