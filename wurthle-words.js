@@ -4,6 +4,7 @@
 
 const crypto = require("crypto");
 const { SECRET } = require("./tokens");
+const { DICTIONARY } = require("./wurthle-dictionary");
 
 const ANSWERS = [
   "HOUSE","PLANT","BRAIN","SHARE","LIGHT","WATER","SMILE","STONE","PRIDE","GRADE",
@@ -38,7 +39,8 @@ const EXTRA_GUESSES = [
   "WORSE","WORST","WORTH","WOULD","WRONG","YIELD","YOUNG","YOUTH"
 ];
 
-const VALID_GUESSES = new Set([...ANSWERS, ...EXTRA_GUESSES]);
+// Any real 5-letter word is a valid guess; only ANSWERS are ever the answer.
+const VALID_GUESSES = new Set([...ANSWERS, ...EXTRA_GUESSES, ...DICTIONARY]);
 
 const EPOCH = new Date("2026-01-01T00:00:00Z");
 
