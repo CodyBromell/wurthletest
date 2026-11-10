@@ -148,4 +148,54 @@ router.post("/players/:customerNumber/reset-password", requireAdmin, async (req,
   }
 });
 
+// ─── GET /api/wurthle/admin/report ──────────────────────────────────
+// Activity data for performance reports. A player "played" on a day if
+// they made at least one guess that day. No customer numbers returned.
+router.get("/report", requireAdmin, async (req, res) => {
+  try {
+    const players = await query(
+      `SELECT u.name,
+              to_char(u.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS joined,
+              u.played, u.wins, u.leaderboard_opt_in AS opt_in,
+              CASE WHEN u.last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
+                   THEN u.streak ELSE 0 END AS streak,
+              u.max_streak,
+              COALESCE(a.active_days, 0)::int AS active_days, a.first_active, a.last_active,
+              COALESCE(r.nov_points, 0)::int AS nov_points
+       FROM wurthle_users u
+       LEFT JOIN (SELECT customer_number, COUNT(DISTINCT puzzle_date) AS active_days,
+                         MIN(puzzle_date) AS first_active, MAX(puzzle_date) AS last_active
+                  FROM wurthle_attempts GROUP BY customer_number) a ON a.customer_number = u.customer_number
+       LEFT JOIN (SELECT customer_number, SUM(points_earned) AS nov_points FROM wurthle_results
+                  WHERE puzzle_date BETWEEN ? AND ? GROUP BY customer_number) r ON r.customer_number = u.customer_number
+       WHERE u.password_hash IS NOT NULL
+       ORDER BY u.created_at`,
+      [CAMPAIGN_START, CAMPAIGN_END]
+    );
+    const activeByDay = await query(
+      `SELECT puzzle_date AS date, COUNT(DISTINCT customer_number)::int AS active
+       FROM wurthle_attempts GROUP BY puzzle_date ORDER BY puzzle_date`
+    );
+    const resultsByDay = await query(
+      `SELECT puzzle_date AS date, COUNT(*)::int AS finished, SUM(won)::int AS wins
+       FROM wurthle_results GROUP BY puzzle_date ORDER BY puzzle_date`
+    );
+    const signupsByDay = await query(
+      `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS signups
+       FROM wurthle_users WHERE password_hash IS NOT NULL GROUP BY 1 ORDER BY 1`
+    );
+    const guessDistribution = await query(
+      `SELECT attempts, COUNT(*)::int AS wins FROM wurthle_results WHERE won = 1 GROUP BY attempts ORDER BY attempts`
+    );
+    res.json({
+      generatedAt: new Date().toISOString(),
+      campaign: { start: CAMPAIGN_START, end: CAMPAIGN_END },
+      players, activeByDay, resultsByDay, signupsByDay, guessDistribution,
+    });
+  } catch (err) {
+    console.error("admin/report error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 module.exports = router;
