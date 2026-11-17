@@ -48,6 +48,27 @@ function pointsForStreak(streak) {
   return 3;
 }
 
+// ─── Double points days (UK dates, YYYY-MM-DD) ───────────────────────
+// A win on one of these days scores twice the usual points, streak bonus
+// included. More days can be added here or in the DOUBLE_POINT_DAYS env
+// var (comma-separated) without touching the rest of the code.
+const DOUBLE_POINT_DAYS = new Set([
+  "2026-11-18",
+  ...String(process.env.DOUBLE_POINT_DAYS || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+]);
+
+function isDoublePointsDay(dateStr) {
+  return DOUBLE_POINT_DAYS.has(dateStr);
+}
+
+function pointsFor(streak, dateStr) {
+  return pointsForStreak(streak) * (isDoublePointsDay(dateStr) ? 2 : 1);
+}
+
+function nextDoublePointsDay(dateStr) {
+  return [...DOUBLE_POINT_DAYS].filter((d) => d > dateStr).sort()[0] || null;
+}
+
 async function getOrCreatePuzzle(dateStr) {
   const existing = await query(
     `SELECT date, puzzle_no, answer FROM wurthle_puzzles WHERE date = ?`,
@@ -279,7 +300,8 @@ router.get("/state", requireAuth, async (req, res) => {
         distribution: JSON.parse(user.distribution),
       },
       balance: user.balance,
-      pointsForToday: pointsForStreak(streak + (won ? 0 : 1)),
+      pointsForToday: pointsFor(streak + (won ? 0 : 1), dateStr),
+      doublePoints: { today: isDoublePointsDay(dateStr), next: nextDoublePointsDay(dateStr) },
       activity,
       leaderboardOptIn: !!user.leaderboard_opt_in,
       mustChangePassword: !!user.must_change_password,
@@ -474,7 +496,7 @@ router.post("/guess", requireAuth, async (req, res) => {
           ? user.streak + 1
           : 1;
         newMaxStreak = Math.max(newMaxStreak, newStreak);
-        pointsEarned = pointsForStreak(newStreak);
+        pointsEarned = pointsFor(newStreak, dateStr);
         newBalance += pointsEarned;
       } else {
         newStreak = 0;
@@ -502,7 +524,9 @@ router.post("/guess", requireAuth, async (req, res) => {
          JSON.stringify(distribution), newBalance, dateStr, customerNumber]
       );
       if (won) {
-        await addActivity(customerNumber, `Würthle #${puzzle.puzzle_no} solved (${attemptNo}/${MAX_ATTEMPTS})`, pointsEarned);
+        await addActivity(customerNumber,
+          `Würthle #${puzzle.puzzle_no} solved (${attemptNo}/${MAX_ATTEMPTS})${isDoublePointsDay(dateStr) ? " · double points" : ""}`,
+          pointsEarned);
       }
     }
 
@@ -513,6 +537,7 @@ router.post("/guess", requireAuth, async (req, res) => {
       won,
       answer: finished ? puzzle.answer : null,
       pointsEarned,
+      doublePoints: isDoublePointsDay(dateStr),
       balance: newBalance,
       streak: newStreak,
       maxStreak: newMaxStreak,

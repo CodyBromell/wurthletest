@@ -159,6 +159,26 @@ ${BASE_CSS}
     letter-spacing: -0.01em;
   }
   .puzzle-no { font-size: 11px; color: var(--muted-2); letter-spacing: 0.02em; }
+  .stat-chip.double { background: var(--wurth-red); color: #fff; }
+
+  /* ─── Double points banner ───────────────────────────────── */
+  .promo-banner {
+    display: none; align-items: center; gap: 12px;
+    margin: -4px 0 16px; padding: 11px 14px;
+    border-radius: var(--radius);
+    font-size: 12.5px; line-height: 1.35;
+  }
+  .promo-banner.show { display: flex; }
+  .promo-banner.live { background: var(--wurth-red); color: #fff; box-shadow: var(--shadow-sm); }
+  .promo-banner.soon { background: #FFF7F0; border: 1px solid #FFDDC2; color: var(--ink); }
+  .promo-badge {
+    flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .promo-banner.live .promo-badge { background: #fff; color: var(--wurth-red); }
+  .promo-banner.soon .promo-badge { background: var(--wurth-red); color: #fff; }
+  .promo-title { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
 
   /* ─── Board ──────────────────────────────────────────────── */
   .wurthle-board {
@@ -604,7 +624,8 @@ ${BASE_CSS}
   .big-balance, .stat-cell-val, .stat-chip-val, .lb-stat-val, .balance-val,
   .lb-rank, .lb-points, .avatar,
   .wurthle-tile, .example-tile, .wurthle-key, .dist-bar,
-  .btn, .login-form button, .lb-optin-cta, .lb-me-chip {
+  .btn, .login-form button, .lb-optin-cta, .lb-me-chip,
+  .promo-title, .promo-badge {
     font-family: var(--font-head);
     font-weight: 800;
     letter-spacing: 0.01em;
@@ -731,12 +752,17 @@ ${BASE_CSS}
             <div class="stat-chip-label">Streak</div>
             <div class="stat-chip-val" id="streak-val">0</div>
           </div>
-          <div class="stat-chip dark">
-            <div class="stat-chip-label">Today</div>
+          <div class="stat-chip dark" id="points-chip">
+            <div class="stat-chip-label" id="points-label">Today</div>
             <div class="stat-chip-val" id="points-val">3 pts</div>
           </div>
         </div>
         <div class="puzzle-no" id="puzzle-no"></div>
+      </div>
+
+      <div id="promo-banner" class="promo-banner" role="status">
+        <div class="promo-badge">2&times;</div>
+        <div><div class="promo-title" id="promo-title"></div><div id="promo-text"></div></div>
       </div>
 
       <div id="board" class="wurthle-board"></div>
@@ -888,6 +914,7 @@ ${BASE_CSS}
         <tr><td>7-day streak</td><td>4 pts</td></tr>
         <tr><td>14-day streak</td><td>5 pts</td></tr>
         <tr><td>21-day streak</td><td>6 pts</td></tr>
+        <tr><td>Double points day</td><td>2&times; pts</td></tr>
       </table>
     </div>
   </div>
@@ -1182,11 +1209,42 @@ ${BASE_CSS}
     if (won) {
       const labels = ['Genius!','Impressive!','Splendid!','Great!','Phew!'];
       document.getElementById('endstatus').textContent = labels[attempts - 1] || 'Solved!';
-      document.getElementById('endpoints').innerHTML = 'Solved in ' + attempts + '/' + MAX_ATTEMPTS + ' · <strong>+' + pointsEarned + ' pts</strong> · Total: ' + balance + ' pts';
+      const doubled = state && state.doublePoints && state.doublePoints.today;
+      document.getElementById('endpoints').innerHTML = 'Solved in ' + attempts + '/' + MAX_ATTEMPTS + ' · <strong>+' + pointsEarned + ' pts' + (doubled ? ' (double points!)' : '') + '</strong> · Total: ' + balance + ' pts';
     } else {
       document.getElementById('endstatus').textContent = 'The word was ' + answer;
       document.getElementById('endpoints').textContent = 'Streak reset · come back tomorrow';
     }
+  }
+
+  // ─── Double points banner ─────────────────────────────────────────
+  // Live on the day; a teaser for up to 3 days before.
+  function renderDoublePoints(s) {
+    const dp = s.doublePoints || {};
+    const banner = document.getElementById('promo-banner');
+    const chip = document.getElementById('points-chip');
+    chip.classList.toggle('double', !!dp.today);
+    chip.classList.toggle('dark', !dp.today);
+    document.getElementById('points-label').textContent = dp.today ? 'Today · 2×' : 'Today';
+    banner.classList.remove('show', 'live', 'soon');
+
+    if (dp.today) {
+      banner.classList.add('show', 'live');
+      document.getElementById('promo-title').textContent = 'Double points today';
+      document.getElementById('promo-text').textContent = s.today.gameOver
+        ? (s.today.won ? 'Your win today scored double points.' : 'Better luck next time — keep your streak going tomorrow.')
+        : 'Solve today’s Würthle to earn twice the usual points.';
+      return;
+    }
+    if (!dp.next) return;
+    const daysAway = Math.round((new Date(dp.next + 'T00:00:00Z') - new Date(s.today.date + 'T00:00:00Z')) / 86400000);
+    if (daysAway < 1 || daysAway > 3) return;
+    const when = daysAway === 1 ? 'tomorrow'
+      : 'on ' + new Date(dp.next + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long' });
+    const day = new Date(dp.next + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+    banner.classList.add('show', 'soon');
+    document.getElementById('promo-title').textContent = 'Double points ' + when;
+    document.getElementById('promo-text').textContent = 'Win on ' + day + ' to earn twice the usual points.';
   }
 
   // ─── Render full state ────────────────────────────────────────────
@@ -1203,6 +1261,7 @@ ${BASE_CSS}
     document.getElementById('balance-val').textContent = s.balance + ' pts';
     document.getElementById('streak-val').textContent = s.stats.streak;
     document.getElementById('points-val').textContent = s.pointsForToday + ' pts';
+    renderDoublePoints(s);
     document.getElementById('puzzle-no').textContent = 'Puzzle #' + s.today.puzzleNo;
     document.getElementById('datelabel').textContent = new Date(s.today.date + 'T00:00:00').toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
 
