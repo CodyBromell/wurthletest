@@ -298,10 +298,19 @@ ${BASE_CSS}
     show('login');
   }
 
-  async function api(path, method, body) {
+  async function api(path, method, body, timeoutMs) {
     var headers = { 'Content-Type': 'application/json' };
     if (token) headers.Authorization = 'Bearer ' + token;
-    var res = await fetch(API + path, { method: method || 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined });
+    var ctrl = timeoutMs && window.AbortController ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, timeoutMs) : null;
+    var res;
+    try {
+      res = await fetch(API + path, { method: method || 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined, signal: ctrl ? ctrl.signal : undefined });
+    } catch (err) {
+      throw new Error(err && err.name === 'AbortError' ? 'This is taking too long. Press Refresh to try again.' : 'Could not reach the server. Check your connection and press Refresh.');
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 401 && path !== '/login') { signOut(); throw new Error('Please sign in again.'); }
     var data = await res.json().catch(function() { return {}; });
     if (!res.ok) throw new Error(data.error || 'Request failed');
@@ -632,11 +641,20 @@ ${BASE_CSS}
     reportLoading = true;
     $('r-refresh').disabled = true;
     try {
-      renderReport(await api('/daily'));
+      var data = await api('/daily', 'GET', null, 20000);
+      try {
+        renderReport(data);
+      } catch (renderErr) {
+        report = null;
+        throw new Error('The report could not be shown (' + renderErr.message + '). Press Refresh to try again.');
+      }
     } catch (e) {
       if (token) {
         toast(e.message);
-        if (!report) $('r-body').innerHTML = '<div class="card empty">' + esc(e.message) + '</div>';
+        if (!report) {
+          $('r-asat').textContent = 'Not loaded';
+          $('r-body').innerHTML = '<div class="card empty">' + esc(e.message) + '</div>';
+        }
       }
     } finally {
       reportLoading = false;

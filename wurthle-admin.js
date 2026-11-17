@@ -176,25 +176,25 @@ router.get("/daily", requireAdmin, async (req, res) => {
   try {
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
-    const [users, activity, results] = await Promise.all([
-      query(
-        `SELECT customer_number, name, COALESCE(is_test, 0) AS is_test,
-                to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS joined,
-                leaderboard_opt_in AS opt_in,
-                to_char(leaderboard_opt_in_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opted_in_on,
-                CASE WHEN last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
-                     THEN streak ELSE 0 END AS streak
-         FROM wurthle_users WHERE password_hash IS NOT NULL`
-      ),
-      query(
-        `SELECT customer_number, puzzle_date AS date, COUNT(*)::int AS guesses, MIN(created_at) AS first_at
-         FROM wurthle_attempts GROUP BY customer_number, puzzle_date`
-      ),
-      query(
-        `SELECT customer_number, puzzle_date AS date, won, attempts, points_earned AS points, created_at
-         FROM wurthle_results`
-      ),
-    ]);
+    // One query at a time: the Supabase transaction pooler can stall when
+    // queries are pipelined on one connection (as Promise.all would do).
+    const users = await query(
+      `SELECT customer_number, name, COALESCE(is_test, 0) AS is_test,
+              to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS joined,
+              leaderboard_opt_in AS opt_in,
+              to_char(leaderboard_opt_in_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opted_in_on,
+              CASE WHEN last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
+                   THEN streak ELSE 0 END AS streak
+       FROM wurthle_users WHERE password_hash IS NOT NULL`
+    );
+    const activity = await query(
+      `SELECT customer_number, puzzle_date AS date, COUNT(*)::int AS guesses, MIN(created_at) AS first_at
+       FROM wurthle_attempts GROUP BY customer_number, puzzle_date`
+    );
+    const results = await query(
+      `SELECT customer_number, puzzle_date AS date, won, attempts, points_earned AS points, created_at
+       FROM wurthle_results`
+    );
     res.json(buildDailyReport({
       date, now, users, activity, results,
       campaign: { start: CAMPAIGN_START, end: CAMPAIGN_END },
