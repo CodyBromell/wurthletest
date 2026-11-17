@@ -211,6 +211,7 @@ async function initDb() {
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS must_change_password INTEGER DEFAULT 0`);
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
     await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS leaderboard_opt_in_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE wurthle_users ADD COLUMN IF NOT EXISTS is_test INTEGER DEFAULT 0`);
 
     await query(`CREATE INDEX IF NOT EXISTS idx_w_attempts ON wurthle_attempts(customer_number, puzzle_date)`);
     // One row per attempt slot, so parallel guesses can't exceed the limit.

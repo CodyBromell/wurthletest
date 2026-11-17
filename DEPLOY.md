@@ -54,7 +54,8 @@ Campaign terms are at `/wurthle/terms` and linked from the sign-in screen, the l
 
 `https://<your-vercel-url>/wurthle/admin`, signed in with `ADMIN_PASSWORD`. Sessions last 8 hours.
 
-- **Sign-ups** — totals (all time, today, last 7 days, played today, leaderboard opt-ins) and a searchable player list: customer number, name, sign-up and last sign-in times, games played/won, November points, balance, opt-in time and account status.
+- **Daily report** (opens first) — live from the database, refreshes every 5 minutes while open: today's games (who, when, won/lost/still playing, points, streak) against yesterday, campaign totals (sign-ups, played, came back, regulars, opt-ins, guesses to win), day-by-day charts, a week-by-week table, the top 10 and a six-month sign-up outlook. Print / save as PDF from the button. Accounts ticked **Test** on the Players tab are left out.
+- **Players** — totals (all time, today, last 7 days, played today, leaderboard opt-ins) and a searchable player list: customer number, name, sign-up and last sign-in times, games played/won, November points, balance, opt-in time and account status.
 - **Download CSV** — every player, for the prize draw and spend checks.
 - **Reset password** — gives the customer a one-time temporary password (e.g. `k7mq-x2rt-9vha`) and unlocks the account. Pass it on via their sales rep; when they sign in with it they must choose their own password. Staff never know a customer's real password.
 

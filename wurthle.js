@@ -390,7 +390,7 @@ router.get("/leaderboard", requireAuth, async (req, res) => {
           u.name AS name,
           u.leaderboard_opt_in AS opt_in,
           SUM(r.points_earned)::int AS points,
-          MAX(r.created_at) AS reached_at
+          MAX(r.created_at) FILTER (WHERE r.points_earned > 0) AS reached_at
        FROM wurthle_results r
        JOIN wurthle_users u ON u.customer_number = r.customer_number
        WHERE r.puzzle_date BETWEEN ? AND ?
@@ -549,3 +549,5 @@ router.post("/guess", requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.isDoublePointsDay = isDoublePointsDay;
+module.exports.nextDoublePointsDay = nextDoublePointsDay;

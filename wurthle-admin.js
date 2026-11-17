@@ -7,6 +7,8 @@ const jwt = require("jsonwebtoken");
 const { query } = require("./db");
 const { SECRET } = require("./tokens");
 const { hashPassword, generateTemporaryPassword } = require("./passwords");
+const { buildDailyReport } = require("./wurthle-report");
+const { isDoublePointsDay, nextDoublePointsDay } = require("./wurthle");
 
 const router = express.Router();
 
@@ -53,6 +55,7 @@ const PLAYER_COLUMNS = `
   CASE WHEN u.last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
        THEN u.streak ELSE 0 END AS streak,
   u.must_change_password, u.locked_until, (u.password_hash IS NOT NULL) AS has_password,
+  COALESCE(u.is_test, 0) AS is_test,
   COALESCE((SELECT SUM(r.points_earned) FROM wurthle_results r
             WHERE r.customer_number = u.customer_number
               AND r.puzzle_date BETWEEN ? AND ?), 0)::int AS campaign_points`;
@@ -91,7 +94,8 @@ router.get("/players", requireAdmin, async (req, res) => {
          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int AS week,
          COUNT(*) FILTER (WHERE last_played_date = ?)::int AS played_today,
          COUNT(*) FILTER (WHERE leaderboard_opt_in = 1)::int AS opted_in
-       FROM wurthle_users`,
+       FROM wurthle_users
+       WHERE COALESCE(is_test, 0) = 0`,
       [today]
     );
     const players = (await findPlayers(req.query.q, 500)).map((p) => ({ ...p, status: playerStatus(p) }));
@@ -114,10 +118,10 @@ router.get("/players.csv", requireAdmin, async (req, res) => {
   try {
     const players = await findPlayers("", null);
     const header = ["customer_number", "name", "signed_up", "last_sign_in", "last_played", "played", "wins",
-      "streak", "balance", "november_points", "leaderboard_opt_in", "opted_in_at", "status"];
+      "streak", "balance", "november_points", "leaderboard_opt_in", "opted_in_at", "status", "test_account"];
     const rows = players.map((p) => [p.customer_number, p.name, p.created_at, p.last_login_at, p.last_played_date,
       p.played, p.wins, p.streak, p.balance, p.campaign_points, p.leaderboard_opt_in ? "yes" : "no",
-      p.leaderboard_opt_in_at, playerStatus(p)].map(csvCell).join(","));
+      p.leaderboard_opt_in_at, playerStatus(p), p.is_test ? "yes" : "no"].map(csvCell).join(","));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="wurthle-players-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send("﻿" + [header.join(","), ...rows].join("\n"));
@@ -144,6 +148,60 @@ router.post("/players/:customerNumber/reset-password", requireAdmin, async (req,
     res.json({ customerNumber, name: updated[0].name, temporaryPassword });
   } catch (err) {
     console.error("admin/reset-password error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── POST /api/wurthle/admin/players/:customerNumber/test ──────────
+// Marks a staff/test account so the daily report leaves it out.
+router.post("/players/:customerNumber/test", requireAdmin, async (req, res) => {
+  try {
+    const isTest = req.body && req.body.isTest === true ? 1 : 0;
+    const updated = await query(
+      `UPDATE wurthle_users SET is_test = ? WHERE customer_number = ? RETURNING customer_number`,
+      [isTest, String(req.params.customerNumber || "")]
+    );
+    if (!updated.length) return res.status(404).json({ error: "No player with that customer number." });
+    res.json({ customerNumber: updated[0].customer_number, isTest: !!isTest });
+  } catch (err) {
+    console.error("admin/test-flag error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── GET /api/wurthle/admin/daily ───────────────────────────────────
+// Live numbers for the dashboard's Daily report tab. No customer numbers
+// are returned. Test accounts are left out.
+router.get("/daily", requireAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const [users, activity, results] = await Promise.all([
+      query(
+        `SELECT customer_number, name, COALESCE(is_test, 0) AS is_test,
+                to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS joined,
+                leaderboard_opt_in AS opt_in,
+                to_char(leaderboard_opt_in_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opted_in_on,
+                CASE WHEN last_played_date >= to_char((NOW() AT TIME ZONE 'UTC')::date - 1, 'YYYY-MM-DD')
+                     THEN streak ELSE 0 END AS streak
+         FROM wurthle_users WHERE password_hash IS NOT NULL`
+      ),
+      query(
+        `SELECT customer_number, puzzle_date AS date, COUNT(*)::int AS guesses, MIN(created_at) AS first_at
+         FROM wurthle_attempts GROUP BY customer_number, puzzle_date`
+      ),
+      query(
+        `SELECT customer_number, puzzle_date AS date, won, attempts, points_earned AS points, created_at
+         FROM wurthle_results`
+      ),
+    ]);
+    res.json(buildDailyReport({
+      date, now, users, activity, results,
+      campaign: { start: CAMPAIGN_START, end: CAMPAIGN_END },
+      doublePoints: { today: isDoublePointsDay(date), next: nextDoublePointsDay(date) },
+    }));
+  } catch (err) {
+    console.error("admin/daily error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
